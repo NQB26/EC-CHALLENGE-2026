@@ -1,25 +1,79 @@
 #include <Arduino.h>
 #include "BLEGamepad.h"
+#include "Gripper.h"
+#include "drive.h"
+// --- CẤU HÌNH CHÂN KẾT NỐI ---
+#define LIN1 25
+#define LIN2 33
+#define RIN1 26
+#define RIN2 27
+#define PWML 32
+#define PWMR 14
 
+#define SERVO_PIN1 16
+#define SERVO_PIN2 5
+
+// #define ENAL VP
+// #define ENBL VN
+#define ENAR 34
+#define ENBR 35
+
+// --- KHAI BÁO ĐỐI TƯỢNG VÀ BIẾN TOÀN CỤC ---
+Gripper GR;
+Motor L, R;
 BLEGamepad gp;
-
+bool choPhepHoatDong = false;
+uint8_t base_speed = 160;
 void onGamepad(const GamepadState& s) {
-  // ── Check từng nút ──────────────────────────────────────
-  if (gp.isUp())    Serial.println("UP pressed");
-  if (gp.isDown())  Serial.println("DOWN pressed");
-  if (gp.isLeft())  Serial.println("LEFT pressed");
-  if (gp.isRight()) Serial.println("RIGHT pressed");
-  if (gp.isA())     Serial.println("A pressed → open gripper");
-  if (gp.isB())     Serial.println("B pressed → close gripper");
-  if (gp.isX())     Serial.println("X pressed");
-  if (gp.isY())     Serial.println("Y pressed");
+  // ── 0. BẢO VỆ TRẠNG THÁI (START/STOP) ────────────────────────
+  if (!choPhepHoatDong) {
+    L.motor_run(0);
+    R.motor_run(0);
+    return; 
+  }
 
-  // ── Hoặc check bitmask trực tiếp ─────────────────────────
-  // if (s.buttons & BTN_A) { ... }
+  // ── 1. XỬ LÝ DI CHUYỂN (Dùng D-Pad với tốc độ cố định) ──────
+  if (gp.isUp()) {
+    L.motor_run(base_speed);
+    R.motor_run(base_speed);
+  }
+  else if (gp.isDown()) {
+    L.motor_run(-base_speed);
+    R.motor_run(-base_speed);
+  }
+  else if (gp.isLeft()) {
+    L.motor_run(base_speed);
+    R.motor_run(-base_speed);
+  }
+  else if (gp.isRight()) {
+    L.motor_run(-base_speed);
+    R.motor_run(base_speed);
+  }
+  else {
+    L.motor_run(0);
+    R.motor_run(0);
+  }
 
-  // ── Joystick & gripper ────────────────────────────────────
-  Serial.printf("LX=%d LY=%d  RX=%d RY=%d  Gripper=%d\n",
-                s.leftX, s.leftY, s.rightX, s.rightY, s.gripper);
+  // ── 2. XỬ LÝ TAY GẮP (Phím ABXY) ─────────────────────────────
+  if (gp.isA()) {  
+    GR.open();
+    Serial.println("A pressed -> Mở tay gắp");
+  }     
+
+  if (gp.isB()) {  
+    GR.close(85);
+    Serial.println("B pressed -> Đóng tay gắp");
+  } 
+
+  if (gp.isY()) {  
+    GR.lift_up();
+    Serial.println("Y pressed -> Nâng tay gắp");
+  }     
+
+  if (gp.isX()) {  
+    GR.lift_down();
+    Serial.println("X pressed -> Hạ tay gắp");
+  }
 }
 
 void setup() {

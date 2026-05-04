@@ -2,7 +2,8 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Tối ưu viewport để cấm zoom trên điện thoại -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ESP32 BLE Gamepad</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
@@ -31,6 +32,8 @@
     flex-direction: column;
     align-items: center;
     overflow-x: hidden;
+    /* Ngăn hành vi kéo để làm mới (pull-to-refresh) trên mobile */
+    overscroll-behavior: none;
     background-image:
       linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
       linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
@@ -132,6 +135,7 @@
     user-select:none;
     transition: all .1s;
     -webkit-tap-highlight-color: transparent;
+    touch-action: none; /* Cải thiện cảm ứng mobile */
   }
   .dpad-btn:empty { background:transparent; border-color:transparent; cursor:default; }
   .dpad-btn.active, .dpad-btn:active {
@@ -198,6 +202,7 @@
     user-select:none;
     transition: all .1s;
     -webkit-tap-highlight-color: transparent;
+    touch-action: none; /* Cải thiện cảm ứng mobile */
   }
   #btn-y { grid-column:2; grid-row:1; }
   #btn-x { grid-column:1; grid-row:2; }
@@ -269,7 +274,7 @@
     height:4px; background: var(--border); border-radius:2px; cursor:pointer;
   }
   input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+    -webkit-appearance:none; width:22px; height:22px; border-radius:50%;
     background: var(--accent2); border:2px solid var(--bg);
     box-shadow: var(--glow2);
   }
@@ -291,6 +296,51 @@
   .log .line { padding: 1px 0; border-bottom: 1px solid var(--border); }
   .log .line.btn-line { color: var(--accent); }
   .log .ts { color: var(--dim); margin-right:8px; }
+
+  /* ─── Mobile Responsiveness ──────────────────────────── */
+  @media (max-width: 600px) {
+    main { padding: 10px; }
+    .gamepad {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto auto;
+      padding: 16px 10px;
+      gap: 16px 10px;
+    }
+    .center-panel {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      flex-direction: row;
+      justify-content: center;
+      gap: 20px;
+    }
+    .dpad {
+      grid-column: 1;
+      grid-row: 2;
+      grid-template-columns: repeat(3, 40px);
+      grid-template-rows: repeat(3, 40px);
+    }
+    .abxy {
+      grid-column: 2;
+      grid-row: 2;
+      grid-template-columns: repeat(3, 40px);
+      grid-template-rows: repeat(3, 40px);
+    }
+    .joysticks {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      gap: 10px;
+    }
+    .stick-zone { width: 90px; height: 90px; }
+  }
+
+  /* Tối ưu cho chế độ xoay ngang (Landscape) trên điện thoại */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .log { display: none; } /* Ẩn log để chừa không gian hiển thị nút bấm */
+    header, .statusbar { padding: 8px 16px; }
+    main { padding: 10px 16px; gap: 8px; }
+    .gamepad { padding: 12px; gap: 10px; }
+    .stick-zone { width: 80px; height: 80px; }
+  }
 </style>
 </head>
 <body>
@@ -495,15 +545,17 @@ slider.addEventListener('input', () => {
 function setupStick(zoneId, thumbId, onMove) {
   const zone  = document.getElementById(zoneId);
   const thumb = document.getElementById(thumbId);
-  const r = 50, dr = 16; // zone radius, thumb deadzone
-  let active = false, originX, originY;
+  const r = zone.offsetWidth / 2 || 50; 
+  const dr = 16; // zone radius, thumb deadzone
+  let active = false;
 
   function move(cx, cy) {
     const rect = zone.getBoundingClientRect();
-    let dx = cx - (rect.left + r);
-    let dy = cy - (rect.top  + r);
+    const currentR = rect.width / 2; 
+    let dx = cx - (rect.left + currentR);
+    let dy = cy - (rect.top  + currentR);
     const dist = Math.sqrt(dx*dx + dy*dy);
-    const maxD = r - dr;
+    const maxD = currentR - dr;
     if (dist > maxD) { dx *= maxD/dist; dy *= maxD/dist; }
     thumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
     const nx = Math.round((dx / maxD) * 127);
