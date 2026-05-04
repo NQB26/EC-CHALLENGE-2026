@@ -22,16 +22,9 @@
 Gripper GR;
 Motor L, R;
 BLEGamepad gp;
-bool choPhepHoatDong = false;
+
 uint8_t base_speed = 160;
 void onGamepad(const GamepadState& s) {
-  // ── 0. BẢO VỆ TRẠNG THÁI (START/STOP) ────────────────────────
-  if (!choPhepHoatDong) {
-    L.motor_run(0);
-    R.motor_run(0);
-    return; 
-  }
-
   // ── 1. XỬ LÝ DI CHUYỂN (Dùng D-Pad với tốc độ cố định) ──────
   if (gp.isUp()) {
     L.motor_run(base_speed);
@@ -79,9 +72,10 @@ void onGamepad(const GamepadState& s) {
 void setup() {
   Serial.begin(115200);
   gp.begin("ESP32-Gripper");
+  GR.init(SERVO_PIN1, 0, 50 ,SERVO_PIN2, 1, 10);
   gp.onData(onGamepad);
 }
 
 void loop() {
-  gp.update();  // gọi callback nếu có data mới
+  gp.update();  // Cập nhật dữ liệu từ Web Gamepad (thay cho Dabble.processInput)
 }
