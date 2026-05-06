@@ -15,10 +15,12 @@
     --accent: #00e5ff;
     --accent2: #ff3d71;
     --green: #39ff14;
+    --yellow: #ffaa00;
     --dim: #2a3a45;
     --text: #8ba8b8;
     --glow: 0 0 12px #00e5ff88;
     --glow2: 0 0 12px #ff3d7188;
+    --glow-green: 0 0 12px #39ff1488;
   }
 
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -27,12 +29,11 @@
     background: var(--bg);
     color: var(--text);
     font-family: 'Share Tech Mono', monospace;
-    min-height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow-x: hidden;
-    /* Ngăn hành vi kéo để làm mới (pull-to-refresh) trên mobile */
+    overflow: hidden;
     overscroll-behavior: none;
     background-image:
       linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
@@ -42,14 +43,15 @@
 
   /* ─── Header ─────────────────────────────────────────── */
   header {
-    width:100%; max-width:800px;
+    width:100%; max-width:960px;
     display:flex; align-items:center; justify-content:space-between;
-    padding: 18px 24px;
+    padding: 10px 20px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
   .logo {
     font-family: 'Orbitron', sans-serif;
-    font-size: 1rem; font-weight:900;
+    font-size: 0.9rem; font-weight:900;
     color: var(--accent);
     text-shadow: var(--glow);
     letter-spacing: 3px;
@@ -59,14 +61,15 @@
   /* ─── Connect button ─────────────────────────────────── */
   #connectBtn {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 0.75rem; letter-spacing: 2px;
-    padding: 8px 20px;
+    font-size: 0.7rem; letter-spacing: 2px;
+    padding: 6px 16px;
     background: transparent;
     border: 1px solid var(--accent);
     color: var(--accent);
     cursor: pointer;
     transition: all .2s;
     text-transform: uppercase;
+    flex-shrink: 0;
   }
   #connectBtn:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
   #connectBtn.connected { border-color: var(--green); color: var(--green); }
@@ -74,25 +77,37 @@
 
   /* ─── Status bar ─────────────────────────────────────── */
   .statusbar {
-    width:100%; max-width:800px;
-    display:flex; gap:20px; align-items:center;
-    padding: 8px 24px;
-    font-size: 0.7rem; letter-spacing:1px;
+    width:100%; max-width:960px;
+    display:flex; gap:14px; align-items:center;
+    padding: 5px 20px;
+    font-size: 0.65rem; letter-spacing:1px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
   .dot {
-    width:8px; height:8px; border-radius:50%;
+    width:7px; height:7px; border-radius:50%;
     background: var(--dim); flex-shrink:0;
     transition: background .3s;
   }
   .dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); animation: blink 1.5s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
+  .ctrl-status {
+    margin-left: auto;
+    font-size: 0.6rem;
+    letter-spacing: 1px;
+    color: var(--dim);
+    transition: color .3s;
+  }
+  .ctrl-status.active { color: var(--green); text-shadow: var(--glow-green); }
+
   /* ─── Main layout ────────────────────────────────────── */
   main {
-    width:100%; max-width:800px;
-    padding: 20px 16px;
-    display:flex; flex-direction:column; gap:16px;
+    width:100%; max-width:960px;
+    padding: 10px 14px;
+    display:flex; flex-direction:column; gap:10px;
+    flex: 1;
+    overflow: hidden;
   }
 
   /* ─── Gamepad shell ──────────────────────────────────── */
@@ -100,13 +115,13 @@
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 24px 20px;
+    padding: 16px 16px;
     display: grid;
     grid-template-columns: 1fr auto 1fr;
-    grid-template-rows: auto auto;
-    gap: 20px;
+    gap: 16px;
     align-items: center;
     position: relative;
+    flex-shrink: 0;
   }
   .gamepad::before {
     content:'';
@@ -119,8 +134,8 @@
   /* ─── D-Pad ──────────────────────────────────────────── */
   .dpad {
     display: grid;
-    grid-template-columns: repeat(3, 48px);
-    grid-template-rows: repeat(3, 48px);
+    grid-template-columns: repeat(3, 52px);
+    grid-template-rows: repeat(3, 52px);
     gap: 4px;
     justify-self: center;
   }
@@ -131,11 +146,11 @@
     cursor: pointer;
     display:flex; align-items:center; justify-content:center;
     color: var(--dim);
-    font-size: 14px;
+    font-size: 16px;
     user-select:none;
     transition: all .1s;
     -webkit-tap-highlight-color: transparent;
-    touch-action: none; /* Cải thiện cảm ứng mobile */
+    touch-action: none;
   }
   .dpad-btn:empty { background:transparent; border-color:transparent; cursor:default; }
   .dpad-btn.active, .dpad-btn:active {
@@ -150,43 +165,64 @@
   #btn-right { grid-column:3; grid-row:2; }
   #btn-down  { grid-column:2; grid-row:3; }
 
-  /* ─── Center (logo + status) ─────────────────────────── */
+  /* ─── Center panel ───────────────────────────────────── */
   .center-panel {
     display:flex; flex-direction:column; align-items:center; gap:10px;
   }
   .mini-logo {
-    font-family:'Orbitron',sans-serif; font-size:0.6rem;
+    font-family:'Orbitron',sans-serif; font-size:0.55rem;
     color:var(--dim); letter-spacing:3px;
   }
-  .grip-indicator {
-    width:60px; height:60px; border-radius:50%;
-    border: 2px solid var(--border);
-    display:flex; align-items:center; justify-content:center;
-    font-size: 0.65rem; color: var(--dim);
-    position:relative; flex-direction:column; gap:2px;
+
+  /* ─── START / SELECT buttons ─────────────────────────── */
+  .system-btns {
+    display: flex; gap: 8px;
   }
-  .grip-indicator svg {
-    position:absolute; top:0; left:0; width:100%; height:100%;
-    transform: rotate(-90deg);
+  .sys-btn {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.5rem; letter-spacing: 1.5px;
+    padding: 6px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all .2s;
+    text-transform: uppercase;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
   }
-  .grip-indicator circle {
-    fill:none; stroke:var(--border); stroke-width:2;
+  #btn-select:active,
+  #btn-select.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: var(--glow);
+    background: rgba(0,229,255,0.08);
   }
-  .grip-arc {
-    fill:none; stroke:var(--accent2); stroke-width:2;
-    stroke-dasharray: 157;
-    stroke-dashoffset: 157;
-    transition: stroke-dashoffset .2s;
-    stroke-linecap: round;
+  #btn-start {
+    border-color: var(--yellow);
+    color: var(--yellow);
   }
-  .grip-val { position:relative; z-index:1; font-size:0.7rem; color:var(--accent); }
-  .grip-lbl { position:relative; z-index:1; font-size:0.5rem; color:var(--dim); }
+  #btn-start:active,
+  #btn-start.ctrl-on {
+    background: var(--yellow);
+    color: var(--bg);
+    box-shadow: 0 0 12px #ffaa0088;
+  }
+  #btn-start.ctrl-on {
+    animation: pulse-start 1.5s infinite;
+  }
+  @keyframes pulse-start {
+    0%,100% { box-shadow: 0 0 8px #ffaa0088; }
+    50% { box-shadow: 0 0 20px #ffaa00cc; }
+  }
 
   /* ─── ABXY Buttons ───────────────────────────────────── */
   .abxy {
     display: grid;
-    grid-template-columns: repeat(3, 48px);
-    grid-template-rows: repeat(3, 48px);
+    grid-template-columns: repeat(3, 52px);
+    grid-template-rows: repeat(3, 52px);
     gap: 4px;
     justify-self: center;
   }
@@ -202,7 +238,7 @@
     user-select:none;
     transition: all .1s;
     -webkit-tap-highlight-color: transparent;
-    touch-action: none; /* Cải thiện cảm ứng mobile */
+    touch-action: none;
   }
   #btn-y { grid-column:2; grid-row:1; }
   #btn-x { grid-column:1; grid-row:2; }
@@ -214,132 +250,122 @@
   #btn-x.active, #btn-x:active { background:#4488ff; color:#fff; box-shadow: 0 0 12px #4488ff88; border-color:#4488ff; }
   #btn-y.active, #btn-y:active { background:#ffaa00; color:#000; box-shadow: 0 0 12px #ffaa0088; border-color:#ffaa00; }
 
-  /* ─── Joysticks ──────────────────────────────────────── */
-  .joysticks {
-    grid-column: 1 / -1;
-    display:flex; gap:24px; justify-content:space-around;
-  }
-  .stick-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; }
-  .stick-lbl { font-size:0.6rem; letter-spacing:2px; color:var(--dim); }
-  .stick-zone {
-    width:100px; height:100px;
-    background: #0d1520;
-    border: 1px solid var(--border);
-    border-radius:50%;
-    position:relative;
-    cursor:pointer;
-    touch-action: none;
-  }
-  .stick-zone::before {
-    content:'';
-    position:absolute; inset:8px;
-    border-radius:50%;
-    border: 1px dashed var(--border);
-  }
-  .stick-thumb {
-    width:32px; height:32px;
-    background: var(--dim);
-    border-radius:50%;
-    position:absolute;
-    top:50%; left:50%;
-    transform:translate(-50%,-50%);
-    transition: background .1s;
-    pointer-events:none;
-    border: 1px solid #3a5060;
-  }
-  .stick-zone:active .stick-thumb,
-  .stick-zone.active .stick-thumb {
-    background: var(--accent);
-    box-shadow: var(--glow);
-  }
-  .stick-vals {
-    font-size:0.6rem; color:var(--dim);
-    display:flex; gap:8px;
-  }
-
-  /* ─── Gripper slider ─────────────────────────────────── */
-  .gripper-row {
-    display:flex; align-items:center; gap:14px;
+  /* ─── Log / Serial panel ─────────────────────────────── */
+  .log-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     background: var(--panel);
     border: 1px solid var(--border);
-    padding: 14px 20px;
-    border-radius:4px;
+    border-radius: 4px;
+    overflow: hidden;
+    min-height: 0;
   }
-  .gripper-row label {
-    font-family:'Orbitron',sans-serif; font-size:0.65rem;
-    letter-spacing:2px; color:var(--accent2); white-space:nowrap;
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
-  input[type=range] {
-    flex:1; -webkit-appearance:none; appearance:none;
-    height:4px; background: var(--border); border-radius:2px; cursor:pointer;
+  .log-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.55rem; letter-spacing: 2px;
+    color: var(--accent); text-transform: uppercase;
   }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance:none; width:22px; height:22px; border-radius:50%;
-    background: var(--accent2); border:2px solid var(--bg);
-    box-shadow: var(--glow2);
+  .log-actions {
+    display: flex; gap: 8px;
   }
-  .gripper-num {
-    font-size:0.85rem; color:var(--accent2); min-width:30px; text-align:right;
+  .log-clear-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.55rem; letter-spacing: 1px;
+    padding: 2px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all .2s;
   }
-
-  /* ─── Log panel ──────────────────────────────────────── */
+  .log-clear-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .log-count {
+    font-size: 0.55rem; color: var(--dim);
+    letter-spacing: 1px;
+  }
   .log {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    padding: 10px 14px;
+    flex: 1;
+    padding: 8px 12px;
     font-size: 0.65rem;
-    height: 100px;
     overflow-y: auto;
     color: var(--text);
-    border-radius:4px;
+    scroll-behavior: smooth;
   }
-  .log .line { padding: 1px 0; border-bottom: 1px solid var(--border); }
-  .log .line.btn-line { color: var(--accent); }
-  .log .ts { color: var(--dim); margin-right:8px; }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-track { background: var(--panel); }
+  .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-  /* ─── Mobile Responsiveness ──────────────────────────── */
+  .log .line { padding: 2px 0; border-bottom: 1px solid rgba(30,42,53,0.5); display: flex; gap: 6px; }
+  .log .line.btn-line { color: var(--accent); }
+  .log .line.ctrl-start { color: var(--green); }
+  .log .line.ctrl-stop  { color: var(--accent2); }
+  .log .line.serial-line { color: #b0e0ff; }
+  .log .ts { color: var(--dim); flex-shrink: 0; font-size: 0.6rem; }
+  .log .msg { word-break: break-all; }
+
+  /* ─── Portrait Mobile ────────────────────────────────── */
   @media (max-width: 600px) {
-    main { padding: 10px; }
+    main { padding: 8px 10px; gap: 8px; }
     .gamepad {
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto auto auto;
-      padding: 16px 10px;
-      gap: 16px 10px;
-    }
-    .center-panel {
-      grid-column: 1 / -1;
-      grid-row: 1;
-      flex-direction: row;
-      justify-content: center;
-      gap: 20px;
+      padding: 12px 10px;
+      gap: 12px 8px;
     }
     .dpad {
-      grid-column: 1;
-      grid-row: 2;
-      grid-template-columns: repeat(3, 40px);
-      grid-template-rows: repeat(3, 40px);
+      grid-template-columns: repeat(3, 44px);
+      grid-template-rows: repeat(3, 44px);
     }
     .abxy {
-      grid-column: 2;
-      grid-row: 2;
-      grid-template-columns: repeat(3, 40px);
-      grid-template-rows: repeat(3, 40px);
+      grid-template-columns: repeat(3, 44px);
+      grid-template-rows: repeat(3, 44px);
     }
-    .joysticks {
-      grid-column: 1 / -1;
-      grid-row: 3;
-      gap: 10px;
-    }
-    .stick-zone { width: 90px; height: 90px; }
+    .sys-btn { padding: 5px 8px; font-size: 0.45rem; }
   }
 
-  /* Tối ưu cho chế độ xoay ngang (Landscape) trên điện thoại */
+  /* ─── Landscape Mobile ───────────────────────────────── */
   @media (max-height: 500px) and (orientation: landscape) {
-    .log { display: none; } /* Ẩn log để chừa không gian hiển thị nút bấm */
-    header, .statusbar { padding: 8px 16px; }
-    main { padding: 10px 16px; gap: 8px; }
-    .gamepad { padding: 12px; gap: 10px; }
-    .stick-zone { width: 80px; height: 80px; }
+    body { overflow: hidden; }
+    header { padding: 5px 16px; }
+    .logo { font-size: 0.75rem; }
+    .statusbar { padding: 3px 16px; }
+    main {
+      padding: 6px 14px;
+      gap: 6px;
+      flex-direction: row;
+      align-items: stretch;
+    }
+    .gamepad {
+      padding: 10px 10px;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .dpad {
+      grid-template-columns: repeat(3, 42px);
+      grid-template-rows: repeat(3, 42px);
+      gap: 3px;
+    }
+    .abxy {
+      grid-template-columns: repeat(3, 42px);
+      grid-template-rows: repeat(3, 42px);
+      gap: 3px;
+    }
+    .system-btns { gap: 6px; }
+    .sys-btn { padding: 5px 8px; font-size: 0.45rem; }
+    .log-container {
+      flex: 1;
+      min-height: 0;
+    }
+    .log { font-size: 0.6rem; }
   }
 </style>
 </head>
@@ -353,6 +379,7 @@
 <div class="statusbar">
   <div class="dot" id="statusDot"></div>
   <span id="statusText">DISCONNECTED</span>
+  <span class="ctrl-status" id="ctrlStatus">● STANDBY</span>
 </div>
 
 <main>
@@ -370,13 +397,12 @@
       <div></div>
     </div>
 
-    <!-- Center -->
+    <!-- Center: START / SELECT -->
     <div class="center-panel">
-      <div class="mini-logo">GRIPPER</div>
-      <div class="grip-indicator">
-        <svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="25"/><circle class="grip-arc" id="gripArc" cx="30" cy="30" r="25"/></svg>
-        <span class="grip-val" id="gripValCenter">0</span>
-        <span class="grip-lbl">%</span>
+      <div class="mini-logo">EC·2026</div>
+      <div class="system-btns">
+        <button class="sys-btn" id="btn-select">SELECT</button>
+        <button class="sys-btn" id="btn-start">START</button>
       </div>
     </div>
 
@@ -392,41 +418,19 @@
       <div class="abxy-btn" id="btn-a" data-btn="A">A</div>
       <div></div>
     </div>
+  </div>
 
-    <!-- Joysticks -->
-    <div class="joysticks">
-      <div class="stick-wrap">
-        <span class="stick-lbl">LEFT STICK</span>
-        <div class="stick-zone" id="stickL">
-          <div class="stick-thumb" id="thumbL"></div>
-        </div>
-        <div class="stick-vals">
-          <span>X:<span id="lxVal">0</span></span>
-          <span>Y:<span id="lyVal">0</span></span>
-        </div>
-      </div>
-      <div class="stick-wrap">
-        <span class="stick-lbl">RIGHT STICK</span>
-        <div class="stick-zone" id="stickR">
-          <div class="stick-thumb" id="thumbR"></div>
-        </div>
-        <div class="stick-vals">
-          <span>X:<span id="rxVal">0</span></span>
-          <span>Y:<span id="ryVal">0</span></span>
-        </div>
+  <!-- Serial Log -->
+  <div class="log-container">
+    <div class="log-header">
+      <span class="log-title">▸ SERIAL OUTPUT</span>
+      <div class="log-actions">
+        <span class="log-count" id="logCount">0 lines</span>
+        <button class="log-clear-btn" id="clearLogBtn">CLEAR</button>
       </div>
     </div>
+    <div class="log" id="log"></div>
   </div>
-
-  <!-- Gripper -->
-  <div class="gripper-row">
-    <label>GRIPPER</label>
-    <input type="range" id="gripperSlider" min="0" max="255" value="0">
-    <span class="gripper-num" id="gripperNum">0</span>
-  </div>
-
-  <!-- Log -->
-  <div class="log" id="log"></div>
 </main>
 
 <script>
@@ -435,23 +439,40 @@ const SVC  = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
 const CMD  = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
 // ── State ──────────────────────────────────────────────────────────────────────
-const BTN = { UP:0x01, DOWN:0x02, LEFT:0x04, RIGHT:0x08, A:0x10, B:0x20, X:0x40, Y:0x80 };
-let buttons = 0;
-let leftX=0, leftY=0, rightX=0, rightY=0, gripper=0;
-let bleChar = null;
+const BTN    = { UP:0x01, DOWN:0x02, LEFT:0x04, RIGHT:0x08, A:0x10, B:0x20, X:0x40, Y:0x80 };
+const FLAG   = { START:0x01, SELECT:0x02 };
+let buttons  = 0;
+let flags    = 0;   // byte[2]: bit0=START, bit1=SELECT
+let bleChar  = null;
 let sendTimer = null;
+let controlling = false;  // trạng thái điều khiển
+let logLineCount = 0;
 
 // ── Log ────────────────────────────────────────────────────────────────────────
-const logEl = document.getElementById('log');
+const logEl    = document.getElementById('log');
+const logCount = document.getElementById('logCount');
+
 function log(msg, cls='') {
   const ts = new Date().toTimeString().slice(0,8);
-  logEl.innerHTML = `<div class="line ${cls}"><span class="ts">${ts}</span>${msg}</div>` + logEl.innerHTML;
+  const line = document.createElement('div');
+  line.className = 'line' + (cls ? ' ' + cls : '');
+  line.innerHTML = `<span class="ts">[${ts}]</span><span class="msg">${msg}</span>`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+  logLineCount++;
+  logCount.textContent = logLineCount + ' lines';
 }
+
+document.getElementById('clearLogBtn').addEventListener('click', () => {
+  logEl.innerHTML = '';
+  logLineCount = 0;
+  logCount.textContent = '0 lines';
+});
 
 // ── BLE ────────────────────────────────────────────────────────────────────────
 document.getElementById('connectBtn').addEventListener('click', async () => {
   try {
-    log('Scanning...');
+    log('Scanning for BLE devices...');
     const dev = await navigator.bluetooth.requestDevice({
       filters: [{ services: [SVC] }]
     });
@@ -471,7 +492,8 @@ function onDisconnect() {
   setConnected(false);
   bleChar = null;
   stopSending();
-  log('Disconnected');
+  if (controlling) stopControlling();
+  log('Disconnected', 'ctrl-stop');
 }
 
 function setConnected(v) {
@@ -484,15 +506,21 @@ function setConnected(v) {
 }
 
 // ── Send packet ────────────────────────────────────────────────────────────────
+// Packet layout (8 bytes):
+//  [0] 0xAA  header
+//  [1] buttons  (UP|DOWN|LEFT|RIGHT|A|B|X|Y)
+//  [2] flags    (bit0=START, bit1=SELECT)
+//  [3-6] reserved (0)
+//  [7] XOR checksum
 function buildPacket() {
   const pkt = new Uint8Array(8);
   pkt[0] = 0xAA;
   pkt[1] = buttons;
-  pkt[2] = leftX  & 0xFF;
-  pkt[3] = leftY  & 0xFF;
-  pkt[4] = rightX & 0xFF;
-  pkt[5] = rightY & 0xFF;
-  pkt[6] = gripper;
+  pkt[2] = flags;
+  pkt[3] = 0;
+  pkt[4] = 0;
+  pkt[5] = 0;
+  pkt[6] = 0;
   let cs = 0; for(let i=0;i<7;i++) cs ^= pkt[i];
   pkt[7] = cs;
   return pkt;
@@ -507,7 +535,62 @@ async function sendPacket() {
 function startSending() { sendTimer = setInterval(sendPacket, 50); }
 function stopSending()  { clearInterval(sendTimer); }
 
-// ── Button press / release ─────────────────────────────────────────────────────
+// ── START / STOP controlling ───────────────────────────────────────────────────
+function startControlling() {
+  controlling = true;
+  flags |= FLAG.START;   // set START bit in packet
+  document.getElementById('btn-start').classList.add('ctrl-on');
+  const cs = document.getElementById('ctrlStatus');
+  cs.textContent = '● CONTROLLING';
+  cs.classList.add('active');
+  log('▶ Bắt đầu điều khiển', 'ctrl-start');
+}
+
+function stopControlling() {
+  controlling = false;
+  flags &= ~FLAG.START;  // clear START bit
+  document.getElementById('btn-start').classList.remove('ctrl-on');
+  const cs = document.getElementById('ctrlStatus');
+  cs.textContent = '● STANDBY';
+  cs.classList.remove('active');
+  log('■ Kết thúc điều khiển', 'ctrl-stop');
+}
+
+// ── START button toggle ────────────────────────────────────────────────────────
+const startBtn = document.getElementById('btn-start');
+
+function handleStart(e) {
+  e.preventDefault();
+  if (controlling) {
+    stopControlling();
+  } else {
+    startControlling();
+  }
+}
+startBtn.addEventListener('mousedown', handleStart);
+startBtn.addEventListener('touchstart', handleStart, {passive:false});
+
+// ── SELECT button ──────────────────────────────────────────────────────────────
+const selectBtn = document.getElementById('btn-select');
+
+function handleSelectDown(e) {
+  e.preventDefault();
+  flags |= FLAG.SELECT;   // set SELECT bit
+  selectBtn.classList.add('active');
+  log('BTN SELECT pressed', 'btn-line');
+}
+function handleSelectUp(e) {
+  e.preventDefault();
+  flags &= ~FLAG.SELECT;  // clear SELECT bit
+  selectBtn.classList.remove('active');
+}
+selectBtn.addEventListener('mousedown',  handleSelectDown);
+selectBtn.addEventListener('mouseup',    handleSelectUp);
+selectBtn.addEventListener('mouseleave', handleSelectUp);
+selectBtn.addEventListener('touchstart', handleSelectDown, {passive:false});
+selectBtn.addEventListener('touchend',   handleSelectUp,   {passive:false});
+
+// ── D-Pad / ABXY Button press / release ───────────────────────────────────────
 function press(mask, name) {
   if (buttons & mask) return;
   buttons |= mask;
@@ -527,78 +610,7 @@ document.querySelectorAll('[data-btn]').forEach(el => {
   el.addEventListener('touchend',   onUp,   {passive:false});
 });
 
-// ── Gripper slider ────────────────────────────────────────────────────────────
-const slider = document.getElementById('gripperSlider');
-const gripNum = document.getElementById('gripperNum');
-const gripArc = document.getElementById('gripArc');
-const gripCenter = document.getElementById('gripValCenter');
-
-slider.addEventListener('input', () => {
-  gripper = parseInt(slider.value);
-  gripNum.textContent = gripper;
-  const pct = gripper / 255;
-  gripArc.style.strokeDashoffset = 157 - (157 * pct);
-  gripCenter.textContent = Math.round(pct * 100);
-});
-
-// ── Joystick ──────────────────────────────────────────────────────────────────
-function setupStick(zoneId, thumbId, onMove) {
-  const zone  = document.getElementById(zoneId);
-  const thumb = document.getElementById(thumbId);
-  const r = zone.offsetWidth / 2 || 50; 
-  const dr = 16; // zone radius, thumb deadzone
-  let active = false;
-
-  function move(cx, cy) {
-    const rect = zone.getBoundingClientRect();
-    const currentR = rect.width / 2; 
-    let dx = cx - (rect.left + currentR);
-    let dy = cy - (rect.top  + currentR);
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    const maxD = currentR - dr;
-    if (dist > maxD) { dx *= maxD/dist; dy *= maxD/dist; }
-    thumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-    const nx = Math.round((dx / maxD) * 127);
-    const ny = Math.round((dy / maxD) * 127);
-    onMove(nx, ny);
-  }
-
-  function end() {
-    active = false;
-    zone.classList.remove('active');
-    thumb.style.transform = 'translate(-50%,-50%)';
-    onMove(0, 0);
-  }
-
-  zone.addEventListener('mousedown', e => {
-    active=true; zone.classList.add('active');
-    move(e.clientX, e.clientY);
-  });
-  window.addEventListener('mousemove', e => { if(active) move(e.clientX, e.clientY); });
-  window.addEventListener('mouseup',   () => { if(active) end(); });
-
-  zone.addEventListener('touchstart', e => {
-    e.preventDefault(); active=true; zone.classList.add('active');
-    move(e.touches[0].clientX, e.touches[0].clientY);
-  }, {passive:false});
-  zone.addEventListener('touchmove', e => {
-    e.preventDefault(); if(active) move(e.touches[0].clientX, e.touches[0].clientY);
-  }, {passive:false});
-  zone.addEventListener('touchend', end);
-}
-
-setupStick('stickL','thumbL',(x,y) => {
-  leftX = x; leftY = y;
-  document.getElementById('lxVal').textContent = x;
-  document.getElementById('lyVal').textContent = y;
-});
-setupStick('stickR','thumbR',(x,y) => {
-  rightX = x; rightY = y;
-  document.getElementById('rxVal').textContent = x;
-  document.getElementById('ryVal').textContent = y;
-});
-
-log('Ready — click CONNECT BLE to start');
+log('Ready — tap [ CONNECT BLE ] to start', 'serial-line');
 </script>
 </body>
 </html>

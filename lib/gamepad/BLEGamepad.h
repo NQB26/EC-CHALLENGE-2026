@@ -18,21 +18,23 @@
 #define BTN_X       0x40
 #define BTN_Y       0x80
 
+// Byte 2 (flags): bit 0 = START, bit 1 = SELECT
+#define BTN_START   0x01
+#define BTN_SELECT  0x02
+
 // ── Packet layout (8 bytes): ───────────────────────────────────────────────────
-//  [0] 0xAA header
-//  [1] buttons bitmask
-//  [2] leftX  (int8)
-//  [3] leftY  (int8)
-//  [4] rightX (int8)
-//  [5] rightY (int8)
-//  [6] gripper (0–255)
-//  [7] XOR checksum
+//  [0] 0xAA  header
+//  [1] buttons bitmask  (UP|DOWN|LEFT|RIGHT|A|B|X|Y)
+//  [2] flags            (bit0=START, bit1=SELECT)
+//  [3] reserved (0)
+//  [4] reserved (0)
+//  [5] reserved (0)
+//  [6] reserved (0)
+//  [7] XOR checksum (XOR of bytes 0–6)
 
 struct GamepadState {
-  uint8_t buttons;   // bitmask
-  int8_t  leftX, leftY;
-  int8_t  rightX, rightY;
-  uint8_t gripper;
+  uint8_t buttons;   // bitmask: UP DOWN LEFT RIGHT A B X Y
+  uint8_t flags;     // bit0=START, bit1=SELECT
   bool    connected;
 };
 
@@ -65,8 +67,8 @@ public:
 
   void onData(GamepadCallback cb) { _cb = cb; }
 
-  // ── Check helpers ────────────────────────────────────────────────────────────
-  bool isPressed(uint8_t btn)  const { return (_state.buttons & btn) != 0; }
+  // ── D-Pad / ABXY helpers ─────────────────────────────────────────────────────
+  bool isPressed(uint8_t btn) const { return (_state.buttons & btn) != 0; }
   bool isUp()     const { return isPressed(BTN_UP);    }
   bool isDown()   const { return isPressed(BTN_DOWN);  }
   bool isLeft()   const { return isPressed(BTN_LEFT);  }
@@ -75,6 +77,10 @@ public:
   bool isB()      const { return isPressed(BTN_B);     }
   bool isX()      const { return isPressed(BTN_X);     }
   bool isY()      const { return isPressed(BTN_Y);     }
+
+  // ── System button helpers ────────────────────────────────────────────────────
+  bool isStart()  const { return (_state.flags & BTN_START)  != 0; }
+  bool isSelect() const { return (_state.flags & BTN_SELECT) != 0; }
 
   const GamepadState& state() const { return _state; }
   bool connected() const { return _state.connected; }
@@ -88,18 +94,16 @@ private:
 
   void _parse(const uint8_t* d, size_t n) {
     if (n < 8 || d[0] != 0xAA) return;
-    uint8_t cs = 0; for (int i=0;i<7;i++) cs ^= d[i];
+    uint8_t cs = 0; for (int i = 0; i < 7; i++) cs ^= d[i];
     if (cs != d[7]) return;
     _state.buttons = d[1];
-    _state.leftX   = (int8_t)d[2]; _state.leftY  = (int8_t)d[3];
-    _state.rightX  = (int8_t)d[4]; _state.rightY = (int8_t)d[5];
-    _state.gripper = d[6];
+    _state.flags   = d[2];
     _fresh = true;
   }
 
   struct _SrvCB : BLEServerCallbacks {
-    void onConnect(BLEServer*)    override { if(_inst) _inst->_state.connected=true;  Serial.println("[BLE] Connected");    }
-    void onDisconnect(BLEServer* s) override { if(_inst) _inst->_state.connected=false; Serial.println("[BLE] Disconnected"); s->getAdvertising()->start(); }
+    void onConnect(BLEServer*)      override { if (_inst) _inst->_state.connected = true;  Serial.println("[BLE] Connected");    }
+    void onDisconnect(BLEServer* s) override { if (_inst) _inst->_state.connected = false; Serial.println("[BLE] Disconnected"); s->getAdvertising()->start(); }
   };
   struct _CmdCB : BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* c) override {
