@@ -26,15 +26,16 @@
 //  [0] 0xAA  header
 //  [1] buttons bitmask  (UP|DOWN|LEFT|RIGHT|A|B|X|Y)
 //  [2] flags            (bit0=START, bit1=SELECT)
-//  [3] reserved (0)
+//  [3] base_speed       (0–255)
 //  [4] reserved (0)
 //  [5] reserved (0)
 //  [6] reserved (0)
 //  [7] XOR checksum (XOR of bytes 0–6)
 
 struct GamepadState {
-  uint8_t buttons;   // bitmask: UP DOWN LEFT RIGHT A B X Y
-  uint8_t flags;     // bit0=START, bit1=SELECT
+  uint8_t buttons;     // bitmask: UP DOWN LEFT RIGHT A B X Y
+  uint8_t flags;       // bit0=START, bit1=SELECT
+  uint8_t base_speed;  // 0–255, gửi từ web slider
   bool    connected;
 };
 
@@ -96,8 +97,9 @@ private:
     if (n < 8 || d[0] != 0xAA) return;
     uint8_t cs = 0; for (int i = 0; i < 7; i++) cs ^= d[i];
     if (cs != d[7]) return;
-    _state.buttons = d[1];
-    _state.flags   = d[2];
+    _state.buttons    = d[1];
+    _state.flags      = d[2];
+    _state.base_speed = d[3];
     _fresh = true;
   }
 
