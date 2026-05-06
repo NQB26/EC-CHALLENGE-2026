@@ -24,8 +24,14 @@ Motor L, R;
 BLEGamepad gp;
 
 uint8_t base_speed = 160;
+bool start = false;
 void onGamepad(const GamepadState& s) {
   // ── 1. XỬ LÝ DI CHUYỂN (Dùng D-Pad với tốc độ cố định) ──────
+  if (gp.isStart()) start = true;
+  else {
+    return;
+  } 
+
   if (gp.isUp()) {
     L.motor_run(base_speed);
     R.motor_run(base_speed);
@@ -77,5 +83,8 @@ void setup() {
 }
 
 void loop() {
-  gp.update();  // Cập nhật dữ liệu từ Web Gamepad (thay cho Dabble.processInput)
+  gp.update();
+  if (!start){
+    Serial.println("Tu dong di chuyen.");
+  }
 }
