@@ -2,6 +2,8 @@
 #include "BLEGamepad.h"
 #include "Gripper.h"
 #include "drive.h"
+#include "LineBot.h"
+
 // --- CẤU HÌNH CHÂN KẾT NỐI ---
 #define LIN1 25
 #define LIN2 33
@@ -19,20 +21,20 @@
 #define ENBR 35
 
 // --- KHAI BÁO ĐỐI TƯỢNG VÀ BIẾN TOÀN CỤC ---
-Gripper GR;
+Gripper  GR;
 Motor L, R;
 BLEGamepad gp;
 
 uint8_t base_speed = 160;
 bool start = false;
-uint8_t angle1 = 50, angle2 = 15;
+uint8_t nv = 0;
 void onGamepad(const GamepadState& s) {
   // ── 1. XỬ LÝ DI CHUYỂN (Dùng D-Pad với tốc độ cố định) ──────
   if (gp.isStart()) start = true;
   else {
     return;
   } 
-
+  if (gp.isSelect()) nv++;
   if (gp.isUp()) {
     L.motor_run(base_speed);
     R.motor_run(base_speed);
@@ -42,12 +44,12 @@ void onGamepad(const GamepadState& s) {
     R.motor_run(-base_speed);
   }
   else if (gp.isLeft()) {
-    L.motor_run(130);
-    R.motor_run(-130);
+    L.motor_run(base_speed);
+    R.motor_run(-base_speed);
   }
   else if (gp.isRight()) {
-    L.motor_run(-130);
-    R.motor_run(130);
+    L.motor_run(-base_speed);
+    R.motor_run(base_speed);
   }
   else {
     L.motor_run(0);
@@ -55,49 +57,42 @@ void onGamepad(const GamepadState& s) {
   }
 
   // ── 2. XỬ LÝ TAY GẮP (Phím ABXY) ─────────────────────────────
-  if (gp.isA()) {  
+  if (gp.isA()){  
     GR.open();
-    angle1 = 50;
     Serial.println("A pressed -> Mở tay gắp");
-  }     
+  }
 
-  if (gp.isB()) {  
-    angle1++;
-    if (angle1 > 90){
-      angle1 = 90;
-    }
-    else GR.close(angle2);
+  if (gp.isB()) {
+    GR.close(85);
     Serial.println("B pressed -> Đóng tay gắp");
-  } 
+  }
 
   if (gp.isY()) {
-    angle2++;
-    if (angle2 > 90){
-      angle2 = 90;
-    }
-    else GR.lift_up(angle2);
+    GR.lift_up();
     Serial.println("Y pressed -> Nâng tay gắp");
-  }     
+  }
 
-  if (gp.isX()) {  
+  if (gp.isX()) {
     GR.lift_down();
-    angle2 = 15;
     Serial.println("X pressed -> Hạ tay gắp");
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  gp.begin("ESP32-Gripper");
-  GR.init(SERVO_PIN1, 0, 50,SERVO_PIN2, 1, 15);
-  L.init(LIN1, LIN2, PWML, 2);
-  R.init(RIN2, RIN1, PWMR, 3);
+
+  // Gamepad BLE (tên khác BLE_DEVICE_NAME của LineBot)
+  gp.begin("Lightning-Seekers");
   gp.onData(onGamepad);
+
+  // Tay gắp: servo lift trên kênh 0, servo grip trên kênh 1
+  GR.init(SERVO_PIN1, 0, 50, SERVO_PIN2, 1, 15);
 }
 
 void loop() {
   gp.update();
   if (!start){
     Serial.println("Tu dong di chuyen.");
+
   }
 }
