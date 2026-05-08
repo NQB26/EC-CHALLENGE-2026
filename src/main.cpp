@@ -1,103 +1,27 @@
 #include <Arduino.h>
-#include "BLEGamepad.h"
-#include "Gripper.h"
-#include "drive.h"
-// --- CẤU HÌNH CHÂN KẾT NỐI ---
-#define LIN1 25
-#define LIN2 33
-#define RIN1 26
-#define RIN2 27
-#define PWML 32
-#define PWMR 14
+#include "LineBot.h"
 
-#define SERVO_PIN1 16
-#define SERVO_PIN2 5
-
-// #define ENAL VP
-// #define ENBL VN
-#define ENAR 34
-#define ENBR 35
-
-// --- KHAI BÁO ĐỐI TƯỢNG VÀ BIẾN TOÀN CỤC ---
-Gripper GR;
-Motor L, R;
-BLEGamepad gp;
-
-uint8_t base_speed = 160;
-bool start = false;
-uint8_t angle1 = 50, angle2 = 15;
-void onGamepad(const GamepadState& s) {
-  // ── 1. XỬ LÝ DI CHUYỂN (Dùng D-Pad với tốc độ cố định) ──────
-  if (gp.isStart()) start = true;
-  else {
-    return;
-  } 
-
-  if (gp.isUp()) {
-    L.motor_run(base_speed);
-    R.motor_run(base_speed);
-  }
-  else if (gp.isDown()) {
-    L.motor_run(-base_speed);
-    R.motor_run(-base_speed);
-  }
-  else if (gp.isLeft()) {
-    L.motor_run(130);
-    R.motor_run(-130);
-  }
-  else if (gp.isRight()) {
-    L.motor_run(-130);
-    R.motor_run(130);
-  }
-  else {
-    L.motor_run(0);
-    R.motor_run(0);
-  }
-
-  // ── 2. XỬ LÝ TAY GẮP (Phím ABXY) ─────────────────────────────
-  if (gp.isA()) {  
-    GR.open();
-    angle1 = 50;
-    Serial.println("A pressed -> Mở tay gắp");
-  }     
-
-  if (gp.isB()) {  
-    angle1++;
-    if (angle1 > 90){
-      angle1 = 90;
-    }
-    else GR.close(angle2);
-    Serial.println("B pressed -> Đóng tay gắp");
-  } 
-
-  if (gp.isY()) {
-    angle2++;
-    if (angle2 > 90){
-      angle2 = 90;
-    }
-    else GR.lift_up(angle2);
-    Serial.println("Y pressed -> Nâng tay gắp");
-  }     
-
-  if (gp.isX()) {  
-    GR.lift_down();
-    angle2 = 15;
-    Serial.println("X pressed -> Hạ tay gắp");
-  }
+// =====================================================
+// Nhiệm vụ 3 – Dò line (chỉ dùng thư viện LineBot)
+//
+// Phần cứng do LineBot::begin() tự khởi tạo:
+//   Motor  : TB6612FNG  (AIN1/2=25/33, BIN1/2=26/27, PWMA=32, PWMB=14)
+//   Sensor : 8 IR qua HC4067 MUX (S0=23, S1=19, S2=18, SIG=13)
+//   OLED   : SSD1306 128x64 I2C  (SDA=21, SCL=22)
+//   Nút    : GPIO 2 ACTIVE-HIGH
+//              Lần 1 → calib nền TRẮNG (500 mẫu)
+//              Lần 2 → calib LINE ĐEN  (500 mẫu)
+//              Sau đó → toggle RUN / STOP
+//   BLE    : "LineBot" – chỉnh Kp/Ki/Kd từ dashboard
+// =====================================================
+void nv3() {
+  LineBot::update2();
 }
 
 void setup() {
-  Serial.begin(115200);
-  gp.begin("ESP32-Gripper");
-  GR.init(SERVO_PIN1, 0, 50,SERVO_PIN2, 1, 15);
-  L.init(LIN1, LIN2, PWML, 2);
-  R.init(RIN2, RIN1, PWMR, 3);
-  gp.onData(onGamepad);
+  LineBot::begin();
 }
 
 void loop() {
-  gp.update();
-  if (!start){
-    Serial.println("Tu dong di chuyen.");
-  }
+  nv3();
 }

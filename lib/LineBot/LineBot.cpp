@@ -5,8 +5,12 @@
 
 #include "LineBot.h"
 #include "drive.h"
+#include <Preferences.h>
 
 namespace LineBot {
+
+// NVS – lưu params PID qua reboot
+Preferences prefs;
 
 // =====================================================
 // OLED
@@ -20,43 +24,47 @@ namespace LineBot {
 Adafruit_SSD1306 display(SCREEN_W, SCREEN_H, &Wire, -1);
 
 // =====================================================
-// Nut bam - 1 nut duy nhat
-// Theo mach ban ve: 3V3 -- nut -- GPIO -- R 10k -- GND
-// => PULL-DOWN ngoai, ACTIVE HIGH
-// Binh thuong: GPIO = LOW
-// Bam nut:    GPIO = HIGH
-// Chi dung debounce, KHONG dung long-press.
-//
-// Ban dang ve vao IO2. Neu thuc te cam vao IO4 thi doi lai thanh 4.
-// Luu y IO2/IO4 deu la chan boot-strap, khong giu nut khi reset/nap code.
+// Nut bam – 2 nut, ACTIVE HIGH, pull-down ngoai 10k
+//   IO2 (BTN_ONE_PIN): calib WHITE/BLACK + RUN/STOP
+//   IO4 (BTN_TWO_PIN): calib WHITE/BLACK + RUN/STOP (giong IO2)
+// Luu y IO2/IO4 la chan boot-strap, KHONG giu nut khi reset/nap code!
+// BLE dashboard cung dieu khien duoc song song.
 // =====================================================
 #define BTN_ONE_PIN 2
+#define BTN_TWO_PIN 4
 #define DEBOUNCE_MS 40UL
 
-bool btnStable = LOW;
-bool btnLastRaw = LOW;
+// ─── Nut 1 (GPIO2) ────────────────────────────────
+bool btnStable    = LOW;
+bool btnLastRaw   = LOW;
 unsigned long btnLastChange = 0;
 
-// Tra ve true dung 1 lan khi nut vua duoc bam xuong.
-// ACTIVE HIGH: binh thuong LOW, bam = HIGH.
 bool buttonPressedEvent() {
   bool raw = digitalRead(BTN_ONE_PIN);
-
-  if (raw != btnLastRaw) {
-    btnLastRaw = raw;
-    btnLastChange = millis();
-  }
-
+  if (raw != btnLastRaw) { btnLastRaw = raw; btnLastChange = millis(); }
   if (millis() - btnLastChange > DEBOUNCE_MS) {
     if (raw != btnStable) {
       btnStable = raw;
-
-      if (btnStable == HIGH) {
-        return true;
-      }
+      if (btnStable == HIGH) return true;
     }
   }
+  return false;
+}
 
+// ─── Nut 2 (GPIO4) ────────────────────────────────
+bool btn2Stable   = LOW;
+bool btn2LastRaw  = LOW;
+unsigned long btn2LastChange = 0;
+
+bool button2PressedEvent() {
+  bool raw = digitalRead(BTN_TWO_PIN);
+  if (raw != btn2LastRaw) { btn2LastRaw = raw; btn2LastChange = millis(); }
+  if (millis() - btn2LastChange > DEBOUNCE_MS) {
+    if (raw != btn2Stable) {
+      btn2Stable = raw;
+      if (btn2Stable == HIGH) return true;
+    }
+  }
   return false;
 }
 
@@ -77,7 +85,11 @@ uint16_t sensorMin [NUM_SENSORS];
 uint16_t sensorMax [NUM_SENSORS];
 uint16_t sensorTh  [NUM_SENSORS];
 uint16_t sensorNorm[NUM_SENSORS];   // độ đậm đen 0–1000
-bool     sensorBW  [NUM_SENSORS];   // true=đen, false=trắng
+bool     sensorBW  [NUM_SENSORS];   // mảng nhị phân nhận diện vạch đen
+bool     lastSensorBW[NUM_SENSORS] = {false}; // mảng lưu trạng thái lần cuối có line
+
+const int BW_HYST = 30; // Threshold hysteresis
+
 
 const bool SENSOR_ORDER_REVERSED = false;
 bool blackIsHigh = false;
@@ -85,7 +97,7 @@ bool calibrated  = false;
 
 // Mask cảm biến: false = bỏ qua (hỏng/không dùng)
 // Cảm biến 0 bỏ qua vì bỏ hỏng
-const bool SENSOR_ENABLED[NUM_SENSORS] = { false, true, true, true, true, true, true, true };
+const bool SENSOR_ENABLED[NUM_SENSORS] = { true, true, true, true, true, true, true, true };
 
 // =====================================================
 // Motor – GA25Motor Drive (TB6612FNG + Encoder + PID)
@@ -123,7 +135,8 @@ int   maxSpeed    = 255;
 int   searchSpeed = 110;
 int   lineDetTh   = 900;    // tổng black-strength tối thiểu để xem là thấy line
 
-#define CENTER_POS 3500     // vị trí trung tâm (8 cảm biến × 1000 / 2)
+#define DEFAULT_CENTER_POS 3500     // vị trí trung tâm mặc định cho 8 cảm biến
+int centerPos = DEFAULT_CENTER_POS;   // tâm thực tế, sẽ tự tính lại nếu bỏ cảm biến
 
 // =====================================================
 // Trạng thái robot
@@ -131,18 +144,17 @@ int   lineDetTh   = 900;    // tổng black-strength tối thiểu để xem là
 enum RobotState { ST_STOP, ST_CAL, ST_RUN };
 RobotState robotState = ST_STOP;
 
-int oledPage = 0;  // 0–3
+int oledPage = 1;  // 0–3
 
 // =====================================================
 // Biến debug runtime
 // =====================================================
-int   lastPos      = CENTER_POS;
+int   lastPos      = DEFAULT_CENTER_POS;
 int   lastErr      = 0;
 float integralErr  = 0.0f;   // tích lũy integral PID
 int   lastLPWM     = 0;
 int   lastRPWM     = 0;
 bool  lastFound    = false;
-
 // =====================================================
 // Calibration – 2 bước, không chặn loop
 // Bước 1: đặt toàn bộ 8 mắt trên NỀN TRẮNG, lấy 500 mẫu
@@ -434,12 +446,50 @@ void clearCalibration() {
   }
 }
 
+// Tự tính tâm line theo các mắt còn dùng.
+// Nếu bỏ 1 mắt bên phải/trái thì PID không bị lệch tâm ảo nữa.
+void computeCenterPos() {
+  long sum = 0;
+  int count = 0;
+
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (!SENSOR_ENABLED[i]) continue;
+
+    int idx = SENSOR_ORDER_REVERSED ? (NUM_SENSORS - 1 - i) : i;
+    sum += idx * 1000;
+    count++;
+  }
+
+  centerPos = (count > 0) ? (int)(sum / count) : DEFAULT_CENTER_POS;
+}
+
 void computeThresholds() {
   for (int i = 0; i < NUM_SENSORS; i++) {
     if (sensorMax[i] < sensorMin[i] + 10) sensorMax[i] = sensorMin[i] + 10;
     sensorTh[i] = (sensorMin[i] + sensorMax[i]) / 2;
   }
 }
+
+// =====================================================
+// Biến mới – Quản lý Giai đoạn (State Machine)
+// =====================================================
+enum MapPhase {
+  PHASE_NORMAL,     // Dò line bình thường đến góc cua 145 độ
+  PHASE_TURN_145,   // Thực hiện code cứng cua 145 độ phải
+  PHASE_INVERTED,   // Line trắng, nền đen
+  PHASE_CIRCLE,     // Line vòng tròn
+  PHASE_DOTTED,     // Line đứt đoạn
+  PHASE_FINISH      // Về đích
+};
+
+MapPhase currentPhase = PHASE_NORMAL;
+bool invertLineMode   = false;      // Cờ đảo màu line động
+unsigned long phaseStartTime = 0;   // Lưu thời điểm bắt đầu 1 giai đoạn
+
+int   lostLineDir   = 0;        // +1=mất về phải, -1=mất về trái
+bool  wasReversing  = false;
+float filtDErr      = 0.0f;
+unsigned long lostLineTime = 0;
 
 void processSensors() {
   readAllRaw();
@@ -457,18 +507,16 @@ void processSensors() {
     m = constrain(m, 0, 1000);
 
     bool wasBlack = sensorBW[i];
+    
+    // Đảo logic nếu đang ở giai đoạn Inverted (Line trắng nền đen)
+    bool activeBlackIsHigh = invertLineMode ? !blackIsHigh : blackIsHigh;
 
-    if (blackIsHigh) {
+    if (activeBlackIsHigh) {
       sensorNorm[i] = (uint16_t)m;
-
-      // Hysteresis: da den thi de thoat den can thap hon nguong mot chut,
-      // chua den thi de vao den can cao hon nguong mot chut.
       if (wasBlack) sensorBW[i] = (sensorRaw[i] > sensorTh[i] - BW_HYST);
       else          sensorBW[i] = (sensorRaw[i] > sensorTh[i] + BW_HYST);
     } else {
       sensorNorm[i] = (uint16_t)(1000 - m);
-
-      // Truong hop line den cho gia tri ADC thap hon nen dao dieu kien.
       if (wasBlack) sensorBW[i] = (sensorRaw[i] < sensorTh[i] + BW_HYST);
       else          sensorBW[i] = (sensorRaw[i] < sensorTh[i] - BW_HYST);
     }
@@ -478,11 +526,15 @@ void processSensors() {
 bool getLinePos(int &posOut) {
   processSensors();
   long ws = 0, total = 0;
+
   for (int i = 0; i < NUM_SENSORS; i++) {
+    if (!SENSOR_ENABLED[i]) continue;
+
     int idx = SENSOR_ORDER_REVERSED ? (NUM_SENSORS - 1 - i) : i;
     ws    += (long)sensorNorm[i] * idx * 1000;
     total += sensorNorm[i];
   }
+
   if (total < lineDetTh) return false;
   posOut = (int)(ws / total);
   return true;
@@ -702,14 +754,48 @@ void drawPageRaw() {
 }
 
 void drawPageBW() {
-  display.setCursor(0,  0); display.print("BW  "); display.print(stateStr());
-  display.setCursor(0, 12);
-  for (int i = 0; i < NUM_SENSORS; i++) { display.print(sensorBW[i] ? '1' : '0'); display.print(' '); }
-  display.setCursor(0, 26); display.print("POS:"); display.print(lastPos);
-  display.setCursor(68, 26); display.print("ERR:"); display.print(lastErr);
-  display.setCursor(0, 40); display.print("FND:"); display.print(lastFound ? "Y" : "N");
-  display.setCursor(72, 40); display.print("B="); display.print(blackIsHigh ? "HI" : "LO");
-  display.setCursor(0, 54); display.print("BLE:"); display.print(bleConnected ? "CONNECTED" : "--");
+  // ── Bar chart: mỗi mắt enabled là 1 cột ──────────────
+  // Layout 128×64: 54px cho cột, 10px dưới cùng cho label số mắt
+  const int BAR_AREA_H = 54;
+  const int BAR_H_MAX  = BAR_AREA_H - 2;  // chiều cao khi CÓ line
+  const int BAR_H_MIN  = 4;               // chiều cao khi KHÔNG có line
+
+  // Đếm số mắt enabled
+  int enabledCount = 0;
+  for (int i = 0; i < NUM_SENSORS; i++)
+    if (SENSOR_ENABLED[i]) enabledCount++;
+
+  // Tính độ rộng cột, khoảng cách 2px giữa các cột
+  const int GAP = 2;
+  int colW = (SCREEN_W - GAP * (enabledCount - 1)) / enabledCount;
+  if (colW < 1) colW = 1;
+
+  int x = 0;
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (!SENSOR_ENABLED[i]) continue;
+
+    int fillH = sensorBW[i] ? BAR_H_MAX : BAR_H_MIN;
+    int y     = BAR_AREA_H - fillH;  // cột mọc từ dưới lên
+
+    if (sensorBW[i])
+      display.fillRect(x, y, colW, fillH, SSD1306_WHITE);  // đặc = có line
+    else
+      display.drawRect(x, y, colW, fillH, SSD1306_WHITE);  // viền = không có line
+
+    x += colW + GAP;
+  }
+
+  // ── Label số mắt ở dưới cùng ─────────────────────────
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  x = 0;
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (!SENSOR_ENABLED[i]) continue;
+    int labelX = x + colW / 2 - 3;
+    display.setCursor(labelX < 0 ? 0 : labelX, 56);
+    display.print(i);
+    x += colW + GAP;
+  }
 }
 
 void drawPageThreshold() {
@@ -785,10 +871,71 @@ void renderSerial() {
 }
 
 // =====================================================
+// Debug – Hiển thị trạng thái mắt đọc line dạng cột dọc
+// =====================================================
+//
+//  Ví dụ output (Serial Monitor):
+//
+//   S1  S2  S3  S4  S5  S6  S7
+//  ┌──┐     ┌──┐          ┌──┐
+//  │██│     │██│          │██│
+//  │██│     │██│          │██│
+//  │██│     │██│          │██│
+//  └──┘     └──┘          └──┘
+//  [1] [ ] [1] [ ] [ ] [ ] [1]   BW
+//
+//  Mắt disabled (S0) bị ẩn hoàn toàn.
+//  Chiều cao cột tỉ lệ theo sensorNorm (0–1000).
+// ─────────────────────────────────────────────────────
+
+void printSensorBar() {
+  static unsigned long lastT = 0;
+  if (millis() - lastT < 150) return;   // ~6 fps, không làm tắc Serial
+  lastT = millis();
+
+  const int BAR_HEIGHT = 6;             // Số dòng hiển thị chiều cao cột
+  const int COL_W     = 4;             // Độ rộng 1 cột (ký tự)
+
+  // ── Header tên mắt ──────────────────────────────────
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (!SENSOR_ENABLED[i]) continue;
+    char buf[COL_W + 1];
+    snprintf(buf, sizeof(buf), " S%-*d", COL_W - 1, i);
+    Serial.print(buf);
+  }
+  Serial.println();
+
+  // ── Cột dọc tỉ lệ theo sensorNorm ───────────────────
+  // sensorNorm: 0 = trắng, 1000 = đen đậm nhất
+  for (int row = BAR_HEIGHT; row >= 1; row--) {
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      if (!SENSOR_ENABLED[i]) continue;
+      // Ngưỡng để hiển thị block ở dòng này
+      int threshold = (int)((float)(row - 1) / BAR_HEIGHT * 1000.0f);
+      bool fill = (sensorNorm[i] >= (uint16_t)threshold);
+      // Thêm dấu sao nếu vượt ngưỡng BW (sensorBW = true)
+      if (fill && sensorBW[i])  Serial.print(" [*]");
+      else if (fill)            Serial.print(" [|]");
+      else                      Serial.print("    ");
+    }
+    Serial.println();
+  }
+
+  // ── Dòng đáy: nhãn BW nhị phân ──────────────────────
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (!SENSOR_ENABLED[i]) continue;
+    Serial.print(sensorBW[i] ? " [1]" : " [ ]");
+  }
+  Serial.println("  BW");
+  Serial.println();   // Dòng trống phân cách frame
+}
+
+// =====================================================
 // Xử lý nút và lệnh BLE
 // =====================================================
 void handleInputs() {
-  bool pressed = buttonPressedEvent();
+  // Nhận tín hiệu từ cả GPIO2, GPIO4 và BLE
+  bool pressed = buttonPressedEvent() || button2PressedEvent();
 
   // ── 1 nút duy nhất, pull-down ngoài, active HIGH, chỉ debounce ─────────
   // Bấm lần 1 khi chưa calib        : lấy WHITE x500
@@ -819,9 +966,9 @@ void handleInputs() {
   if (bleNewParams) {
     bleNewParams = false;
     // Áp dụng và kẹp giới hạn an toàn
-    Kp          = constrain(vKp,    0.000f, 20.000f);
+    Kp          = constrain(vKp,    0.000f, 50.000f);
     Ki          = constrain(vKi,    0.000f, 20.000f);
-    Kd          = constrain(vKd,    0.000f,  5.000f);
+    Kd          = constrain(vKd,    0.000f,100.000f);
     baseSpeed   = constrain(vBase,  0, 255);
     maxSpeed    = constrain(vMax,   0, 255);
     searchSpeed = constrain(vSrch,  0, 255);
@@ -829,6 +976,18 @@ void handleInputs() {
     integralErr = 0.0f;  // reset tích phân khi đổi params
     Serial.printf("[BLE] Params: Kp=%.3f Ki=%.4f Kd=%.3f base=%d max=%d srch=%d lineTh=%d\n",
       Kp, Ki, Kd, baseSpeed, maxSpeed, searchSpeed, lineDetTh);
+
+    // ── Lưu vào NVS để giữ sau khi reboot ───────
+    prefs.begin("linebot", false);
+    prefs.putFloat("kp",     Kp);
+    prefs.putFloat("ki",     Ki);
+    prefs.putFloat("kd",     Kd);
+    prefs.putInt  ("base",   baseSpeed);
+    prefs.putInt  ("max",    maxSpeed);
+    prefs.putInt  ("srch",   searchSpeed);
+    prefs.putInt  ("lineth", lineDetTh);
+    prefs.end();
+    Serial.println("[NVS] Params saved.");
   }
 
   if (bleCmdRun) {
@@ -861,92 +1020,289 @@ void handleInputs() {
 }
 
 // =====================================================
-// Line following – có xử lý còng vuông 90° / 45°
-//
-// Trạng thái nội bộ:
-//   ST_SPIN_NONE : đang theo line bình thường
-//   ST_SPIN_LOCK : mất line lần đầu → giữ hướng quay, bự qua
-//                  phát hiện line cho đến khi hết MIN_SPIN_MS
-//
-// Sau MIN_SPIN_MS ms mà vẫn chưa tìm lại được line:
-//   → tiếp tục quay đến MAX_SPIN_MS rồi dừng
+// Line following
 // =====================================================
-#define MIN_SPIN_MS  120   // thời gian tối thiểu giữ quay (ms) – chỉnh theo track
-#define MAX_SPIN_MS  600   // thời gian quay tối đa trước khi dừng khẩn cấp
+/*
+ * ============================================================
+ * LineBot – runLineFollower() đã sửa
+ * Thay thế toàn bộ phần "Line following" trong LineBot.cpp
+ * Giữ nguyên tất cả phần còn lại (BLE, OLED, Calibration,...)
+ * ============================================================
+ */
 
-enum SpinState { ST_SPIN_NONE, ST_SPIN_LOCK };
-SpinState  spinState  = ST_SPIN_NONE;
-unsigned long spinStart = 0;
-int spinDir = 1;   // +1 = phải, -1 = trái (ghi nhớ khi mất line)
+// =====================================================
 
-void runLineFollower() {
-  int  pos   = CENTER_POS;
+
+// =====================================================
+// Line following – SỬA TOÀN BỘ
+// =====================================================
+
+void runBasicPID(int customSpeed) {
+  int pos = centerPos;
   bool found = getLinePos(pos);
+  lastFound = found;  // [FIX] Cập nhật trạng thái cho telemetry / OLED
 
-  lastFound = found;
-  lastPos   = pos;
+  // Mảng tĩnh lưu lại trạng thái của cảm biến ở lần đọc có line gần nhất đã được chuyển thành biến toàn cục
 
-  // ── 1. Đang trong giai đoạn cưỡng bức quay (SPIN_LOCK) ─────────────────
-  if (spinState == ST_SPIN_LOCK) {
-    unsigned long elapsed = millis() - spinStart;
-
-    if (elapsed < MIN_SPIN_MS) {
-      // Chưa đủ thời gian tối thiểu: tiếp tục quay, bự qua line nếu thấy
-      if (spinDir > 0) setMotors( searchSpeed, -searchSpeed);
-      else             setMotors(-searchSpeed,  searchSpeed);
-      return;
-    }
-
-    // Đã qua MIN_SPIN_MS: bắt đầu chấp nhận line trở lại
-    if (found) {
-      // Tìm lại được line – thoát SPIN_LOCK, reset PID
-      spinState  = ST_SPIN_NONE;
-      lastErr    = pos - CENTER_POS;
-      integralErr = 0.0f;
-      // không return, chạy xuống phần PID bình thường
-    } else if (elapsed >= MAX_SPIN_MS) {
-      // Quá lâu vẫn không thấy line – dừng khẩn cấp
-      spinState = ST_SPIN_NONE;
-      stopMotors();
-      Serial.println("[SPIN] Timeout – mat line qua lau, dung khan cap");
-      return;
-    } else {
-      // Tiếp tục quay
-      if (spinDir > 0) setMotors( searchSpeed, -searchSpeed);
-      else             setMotors(-searchSpeed,  searchSpeed);
-      return;
-    }
-  }
-
-  // ── 2. Mất line lần đầu → bắt đầu SPIN_LOCK ──────────────────────────
   if (!found) {
-    spinState = ST_SPIN_LOCK;
-    spinStart = millis();
-    // ghi nhớ hướng dựa theo lỗi cuối cùng
-    spinDir   = (lastErr >= 0) ? 1 : -1;  // err>0 = lệch phải → quay phải
-    if (spinDir > 0) setMotors( searchSpeed, -searchSpeed);
-    else             setMotors(-searchSpeed,  searchSpeed);
+    // [FIX] Reset tích phân khi mất line để tránh drift khi bắt lại
+    integralErr = 0.0f;
+
+    // Khi mất line, phân tích mảng lastSensorBW để xem vạch đen nằm ở đâu
+    int leftWeight  = 0;
+    int rightWeight = 0;
+
+    // Đánh trọng số cao hơn cho các mắt ở xa tâm (bên trái: 1, 2, 3)
+    // if (lastSensorBW[0]) leftWeight += 4;
+    if (lastSensorBW[1]) leftWeight += 3*3;
+    if (lastSensorBW[2]) leftWeight += 2*2;
+    if (lastSensorBW[3]) leftWeight += 1;
+
+    // Đánh trọng số cao hơn cho các mắt ở xa tâm (bên phải: 6, 5, 4)
+    // if (lastSensorBW[7]) rightWeight += 4;
+    if (lastSensorBW[6]) rightWeight += 3*3;
+    if (lastSensorBW[5]) rightWeight += 2*2;
+    if (lastSensorBW[4]) rightWeight += 1;
+
+    int spinSpeed = searchSpeed;  // Tốc độ xoay tìm line (mặc định 110)
+
+    if (rightWeight > leftWeight) {
+      // Vạch đen nằm ở nửa phải trước khi mất -> Quay phải
+      setMotors(spinSpeed, -spinSpeed);
+    } else if (leftWeight > rightWeight) {
+      // Vạch đen nằm ở nửa trái trước khi mất -> Quay trái
+      setMotors(-spinSpeed, spinSpeed);
+    } else {
+      // Nếu không phân biệt được, dự phòng bằng lastErr
+      if      (lastErr > 0) setMotors( spinSpeed, -spinSpeed);
+      else if (lastErr < 0) setMotors(-spinSpeed,  spinSpeed);
+      else                  stopMotors();
+    }
     return;
   }
 
-  // ── 3. Thấy line bình thường: PID điều khiển ──────────────────────────
-  int err  = pos - CENTER_POS;
+  // Nếu vẫn thấy line, cập nhật mảng giá trị cũ
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    lastSensorBW[i] = sensorBW[i];
+  }
+
+  // ── Hết phát hiện ngã rẽ ───────────────────────────────────────────────
+
+  int err  = pos - centerPos;
   int dErr = err - lastErr;
   lastErr  = err;
 
-  // Tích phân – anti-windup: chỉ tích lũy khi chưa bão hòa
-  integralErr += err;
-  integralErr  = constrain(integralErr, -5000.0f, 5000.0f);
+  // Hệ số lọc D: 0.7 old / 0.3 new – giảm nhiễu, đủ nhạy
+  filtDErr = filtDErr * 0.70f + (float)dErr * 0.30f;
 
-  float corr  = Kp * err + Ki * integralErr + Kd * dErr;
-  corr = constrain(corr, -(float)maxSpeed, (float)maxSpeed);
+  // Tích phân (I) – chỉ tích lũy khi err nhỏ (anti-windup đơn giản)
+  if (abs(err) < 2000) {
+    integralErr += err;
+    integralErr  = constrain(integralErr, -5000.0f, 5000.0f);
+  }
 
-  int lPWM = constrain(baseSpeed + (int)corr, 0, maxSpeed);
-  int rPWM = constrain(baseSpeed - (int)corr, 0, maxSpeed);
+  // Tính giá trị bù PID
+  float corr = Kp * (float)err + Ki * integralErr + Kd * filtDErr;
+
+  // Cho phép PWM âm (-maxSpeed..maxSpeed) để bánh có thể phanh/lùi khi cua gấp
+  int lPWM = constrain(customSpeed + (int)corr, -maxSpeed, maxSpeed);
+  int rPWM = constrain(customSpeed - (int)corr, -maxSpeed, maxSpeed);
 
   setMotors(lPWM, rPWM);
 }
 
+void executePID(bool found, int pos, int customBaseSpeed) {
+  if (!found) return; // Nếu mất line thì State Machine bên trên sẽ lo
+
+  int   err  = pos - centerPos;
+  int   dErr = err - lastErr;
+  lastErr    = err;
+
+  filtDErr = filtDErr * 0.55f + (float)dErr * 0.45f;
+  integralErr += err;
+  integralErr  = constrain(integralErr, -5000.0f, 5000.0f);
+
+  float corr = Kp * (float)err + Ki * integralErr + Kd * filtDErr;
+
+  // Ngưỡng động theo tốc độ truyền vào
+  int TH_SOFT = map(customBaseSpeed, 60, 255, 600,  1200);
+  int TH_HARD = map(customBaseSpeed, 60, 255, 1100, 2200);
+  TH_SOFT = constrain(TH_SOFT, 500,  1400);
+  TH_HARD = constrain(TH_HARD, 900,  2400);
+
+  int absErr = abs(err);
+  int lPWM, rPWM;
+
+  if (absErr < TH_SOFT) {
+    if (wasReversing) { integralErr *= 0.25f; wasReversing = false; }
+    corr = constrain(corr, -(float)maxSpeed, (float)maxSpeed);
+    lPWM = constrain(customBaseSpeed + (int)corr, 0, maxSpeed);
+    rPWM = constrain(customBaseSpeed - (int)corr, 0, maxSpeed);
+  } else if (absErr < TH_HARD) {
+    int reducedBase = map(absErr, TH_SOFT, TH_HARD, customBaseSpeed, customBaseSpeed * 65 / 100);
+    reducedBase = constrain(reducedBase, 60, maxSpeed);
+    corr = constrain(corr, -(float)maxSpeed, (float)maxSpeed);
+    lPWM = constrain(reducedBase + (int)corr, 0, maxSpeed);
+    rPWM = constrain(reducedBase - (int)corr, 0, maxSpeed);
+    wasReversing = false;
+  } else {
+    wasReversing = true;
+    int outerPWM = map(absErr, TH_HARD, 3500, customBaseSpeed * 80 / 100, maxSpeed * 85 / 100);
+    outerPWM = constrain(outerPWM, 70, maxSpeed);
+    int innerPWM = map(absErr, TH_HARD, 3500, 60, maxSpeed * 70 / 100);
+    innerPWM = constrain(innerPWM, 55, maxSpeed);
+
+    if (err > 0) { lPWM =  outerPWM; rPWM = -innerPWM; } 
+    else         { lPWM = -innerPWM; rPWM =  outerPWM; }
+  }
+  setMotors(lPWM, rPWM);
+}
+void runLineFollower() {
+  int  pos   = centerPos;
+  bool found = getLinePos(pos);
+
+  // Ghi nhớ hướng và thời gian khi vừa mất line
+  if (lastFound && !found) {
+    lostLineDir  = (lastErr >= 0) ? 1 : -1;
+    lostLineTime = millis();
+  }
+  lastFound = found;
+  lastPos   = pos;
+
+  // ==============================================================
+  // CỖ MÁY CHUYỂN TRẠNG THÁI (STATE MACHINE)
+  // ==============================================================
+  switch (currentPhase) {
+
+    // --------------------------------------------------
+    // GIAI ĐOẠN 1: Chạy bình thường -> Chờ cua gắt 145 độ phải
+    // --------------------------------------------------
+    case PHASE_NORMAL:
+      // KÍCH HOẠT: Mắt ngoài cùng bên phải (VD: C7) thấy line, mắt trái (C0) không thấy, lệch tâm mạnh
+      if (found && sensorBW[1] && !sensorBW[7] && (pos - centerPos) > 1800) {
+        stopMotors(); 
+        delay(50); // Phanh cứng dập quán tính
+        currentPhase = PHASE_TURN_145;
+        phaseStartTime = millis();
+        break;
+      }
+      if (found && sensorBW[7] && sensorBW[6] && sensorBW[2] && sensorBW[1] && (!sensorBW[3] || !sensorBW[4])){
+        currentPhase = PHASE_INVERTED;
+      }
+      if (found && sensorBW[1] && sensorBW[7] && sensorBW[3] && (millis() - phaseStartTime > 500)) {
+        currentPhase = PHASE_CIRCLE;
+        phaseStartTime = millis();
+        break;
+      }
+      if (!found) {
+        // Mất line thông thường -> Xoay tìm line
+        int spinPWM = searchSpeed;
+        if (lostLineDir > 0) setMotors( spinPWM, -spinPWM);
+        else                 setMotors(-spinPWM,  spinPWM);
+      } else {
+        executePID(found, pos, baseSpeed);
+      }
+      break;
+
+    // --------------------------------------------------
+    // GIAI ĐOẠN 2: Hard-code bẻ lái gắt 145 độ
+    // --------------------------------------------------
+    case PHASE_TURN_145:
+      // Bánh phải lùi, bánh trái tiến để xoay quanh tâm
+      setMotors(160, -160); 
+
+      // KÍCH HOẠT: Xoay mù khoảng 300ms, sau đó đợi mắt giữa (C3, C4) chạm line lại
+      if (millis() - phaseStartTime > 300 && (sensorBW[3] || sensorBW[4])) {
+        stopMotors(); delay(50);
+        
+        // Chuẩn bị vào line Inverted
+        invertLineMode = true; 
+        currentPhase = PHASE_NORMAL;
+        phaseStartTime = millis();
+      }
+      break;
+
+    // --------------------------------------------------
+    // GIAI ĐOẠN 3: Line trắng nền đen (Inverted)
+    // --------------------------------------------------
+    case PHASE_INVERTED:
+      // KÍCH HOẠT: Kết thúc inverted khi gặp vạch ngang (tất cả các mắt đều đen) 
+      // Do đang ở Inverted Mode, nền đen sẽ báo là KHÔNG CÓ LINE. 
+      // Vạch ngang màu trắng vắt ngang đường -> Tất cả các mắt đều báo CÓ LINE.
+      if (found && sensorBW[1] && sensorBW[7] && sensorBW[2] && (!sensorBW[3] || !sensorBW[4]) && (millis() - phaseStartTime > 1000)) {
+        invertLineMode = false; // Trả về màu line bình thường
+        currentPhase = PHASE_NORMAL;
+        phaseStartTime = millis();
+        break;
+      }
+
+      if (!found) {
+        if (lostLineDir > 0) setMotors(searchSpeed, -searchSpeed);
+        else                 setMotors(-searchSpeed, searchSpeed);
+      } else {
+        executePID(found, pos, baseSpeed);
+      }
+      break;
+
+    // --------------------------------------------------
+    // GIAI ĐOẠN 4: Vòng tròn (Smooth Curve)
+    // --------------------------------------------------
+    case PHASE_CIRCLE:
+      // KÍCH HOẠT: Thoát vòng tròn khi gặp lại vạch ngang hoặc đi hết thời gian ước tính (VD: 4 giây)
+      if ((found && sensorBW[0] && sensorBW[7]) || (millis() - phaseStartTime > 4000)) {
+        currentPhase = PHASE_DOTTED;
+        phaseStartTime = millis();
+        break;
+      }
+
+      if (!found) {
+        if (lostLineDir > 0) setMotors(searchSpeed, -searchSpeed);
+        else                 setMotors(-searchSpeed, searchSpeed);
+      } else {
+        // Trong vòng tròn, nên hạ BaseSpeed xuống một chút để ôm cua gắt tốt hơn
+        executePID(found, pos, baseSpeed * 0.75); 
+      }
+      break;
+
+    // --------------------------------------------------
+    // GIAI ĐOẠN 5: Line đứt đoạn (Dotted Line)
+    // --------------------------------------------------
+    case PHASE_DOTTED:
+      // KÍCH HOẠT VỀ ĐÍCH: Gặp vạch đích (toàn bộ mắt chạm line đen liên tục > 100ms)
+      if (found && sensorBW[0] && sensorBW[7] && sensorBW[3]) {
+        currentPhase = PHASE_FINISH;
+        break;
+      }
+
+      if (!found) {
+        // ĐIỂM CỐT LÕI CỦA DOTTED LINE: 
+        // Khi mất line, KHÔNG xoay tìm ngay lập tức. Chạy rướn thẳng đà trong 400ms để bắt vạch tiếp theo.
+        if (millis() - lostLineTime < 400) {
+          // Chạy thẳng hoặc hơi cong nhẹ theo lastErr
+          int coastBase = baseSpeed * 0.8;
+          int offset = (lastErr > 0) ? 20 : -20; 
+          setMotors(coastBase + offset, coastBase - offset);
+        } else {
+          // Rướn quá 400ms không thấy -> Bắt buộc xoay tìm line
+          if (lostLineDir > 0) setMotors(searchSpeed, -searchSpeed);
+          else                 setMotors(-searchSpeed, searchSpeed);
+        }
+      } else {
+        executePID(found, pos, baseSpeed);
+      }
+      break;
+
+    // --------------------------------------------------
+    // GIAI ĐOẠN 6: Về đích
+    // --------------------------------------------------
+    case PHASE_FINISH:
+      stopMotors();
+      robotState = ST_STOP;
+      currentPhase = PHASE_NORMAL; // Reset trạng thái cho lần chạy sau
+      Serial.println("[INFO] FINISH LINE REACHED!");
+      break;
+  }
+}
 // =====================================================
 // Setup
 // =====================================================
@@ -955,8 +1311,9 @@ void begin() {
   delay(300);
   Serial.println("\n[BOOT] LineBot v2.4 active-high button");
 
-  // Nút bấm
+  // Nút bấm – GPIO2 & GPIO4 (pull-down ngoài, active HIGH)
   pinMode(BTN_ONE_PIN, INPUT);
+  pinMode(BTN_TWO_PIN, INPUT);
 
   // MUX
   pinMode(MUX_S0, OUTPUT); pinMode(MUX_S1, OUTPUT); pinMode(MUX_S2, OUTPUT);
@@ -979,8 +1336,23 @@ void begin() {
   }
 
   clearCalibration();
+  computeCenterPos();
+  Serial.printf("[SENSOR] centerPos=%d\n", centerPos);
   stopMotors();
   readAllRaw();
+
+  // Load params từ NVS (giữ lại giá trị đã chỉnh qua BLE)
+  prefs.begin("linebot", true);   // read-only
+  Kp          = prefs.getFloat("kp",     Kp);
+  Ki          = prefs.getFloat("ki",     Ki);
+  Kd          = prefs.getFloat("kd",     Kd);
+  baseSpeed   = prefs.getInt  ("base",   baseSpeed);
+  maxSpeed    = prefs.getInt  ("max",    maxSpeed);
+  searchSpeed = prefs.getInt  ("srch",   searchSpeed);
+  lineDetTh   = prefs.getInt  ("lineth", lineDetTh);
+  prefs.end();
+  Serial.printf("[NVS] Loaded: Kp=%.3f Ki=%.4f Kd=%.3f base=%d max=%d srch=%d lineTh=%d\n",
+    Kp, Ki, Kd, baseSpeed, maxSpeed, searchSpeed, lineDetTh);
 
   // BLE
   setupBLE();
@@ -989,12 +1361,13 @@ void begin() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(14,  2); display.print("=== LINE BOT v2.3 ===");
-  display.setCursor(0,  16); display.print("BLE: "); display.print(BLE_DEVICE_NAME);
-  display.setCursor(0,  28); display.print("Nut ACTIVE HIGH");
-  display.setCursor(0,  38); display.print("Lan 1: WHITE x500");
-  display.setCursor(0,  48); display.print("Lan 2: BLACK x500");
-  display.setCursor(0,  58); display.print("Sau do: RUN/STOP");
+  display.setCursor(10,  0); display.print("== LINE BOT v2.5 ==");
+  display.setCursor(0,  10); display.print("BLE: "); display.print(BLE_DEVICE_NAME);
+  display.setCursor(0,  20); display.print("Nut IO2 & IO4 ACT-HI");
+  display.setCursor(0,  30); display.print("[1] WHITE x500");
+  display.setCursor(0,  39); display.print("[2] BLACK x500");
+  display.setCursor(0,  48); display.print("[3+] RUN / STOP");
+  display.setCursor(0,  57); display.print("BLE: CAL/RUN/STOP ok");
   display.display();
   delay(2500);
 }
@@ -1020,5 +1393,116 @@ void update() {
   sendTelemetry();
 }
 
+void update2() {
+  // Hệ số cố định cho chế độ này
+  Kp          = 0.035f;
+  Ki          = 0.0f;
+  Kd          = 0.4f;
+  baseSpeed   = 70;
+  maxSpeed    = 150;
+  searchSpeed = 130;
+
+  processSensors();        // Đọc & cập nhật sensorBW / sensorNorm
+  runBasicPID(baseSpeed);  // Chạy PID
+  // renderOLED();            // Hiển thị bar chart mắt cảm biến
+  drawDebugBWOLED();
+}
+
+void runCalibration() {
+  stopMotors();
+  
+  // Đợi người dùng nhả nút IO2 (nếu đang giữ từ trước)
+  while(digitalRead(2) == HIGH) { delay(10); }
+  delay(50);
+  
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("=== CALIBRATION ===");
+  display.println("1. Dat tren NEN TRANG");
+  display.println("   -> Bam IO2");
+  display.display();
+  
+  // Chờ bấm IO2 rồi nhả
+  while(digitalRead(2) == LOW) { delay(10); }
+  while(digitalRead(2) == HIGH) { delay(10); }
+  delay(50);
+
+  startCalibration();
+  while(calPhase == CAL_WHITE_SAMPLING) {
+    updateCalibration();
+    delay(2);
+  }
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("=== CALIBRATION ===");
+  display.println("2. Dat tren LINE DEN");
+  display.println("   -> Bam IO2");
+  display.display();
+
+  // Chờ bấm IO2 rồi nhả
+  while(digitalRead(2) == LOW) { delay(10); }
+  while(digitalRead(2) == HIGH) { delay(10); }
+  delay(50);
+
+  startBlackSampling();
+  while(calPhase == CAL_BLACK_SAMPLING) {
+    updateCalibration();
+    delay(2);
+  }
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("CALIB THANH CONG!");
+  display.println("-> Bam IO4 de CHAY");
+  display.display();
+  
+  // Đợi nhả nút IO4 (trường hợp đang giữ)
+  while(digitalRead(4) == LOW) { delay(10); }
+  
+  // Chờ bấm IO4 (Active LOW) rồi nhả
+  while(digitalRead(4) == HIGH) { delay(10); }
+  while(digitalRead(4) == LOW) { delay(10); }
+  delay(50);
+}
+
+// =====================================================
+// DEBUG OLED: Xem 2 mảng BW và LAST_BW cùng lúc
+// =====================================================
+void drawDebugBWOLED() {
+  processSensors();
+  display.clearDisplay();
+  
+  int colW = 12;
+  int gap = 2;
+  int startX = 8;
+  
+  // Hàng 1: sensorBW (NOW)
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("NOW:");
+  
+  int x = startX;
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (sensorBW[i]) display.fillRect(x, 10, colW, 20, SSD1306_WHITE);
+    else             display.drawRect(x, 10, colW, 20, SSD1306_WHITE);
+    x += colW + gap;
+  }
+  
+  // Hàng 2: lastSensorBW (LAST)
+  display.setCursor(0, 34);
+  display.print("LAST:");
+  
+  x = startX;
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (lastSensorBW[i]) display.fillRect(x, 44, colW, 20, SSD1306_WHITE);
+    else                 display.drawRect(x, 44, colW, 20, SSD1306_WHITE);
+    x += colW + gap;
+  }
+  
+  display.display();
+}
 
 } // namespace LineBot

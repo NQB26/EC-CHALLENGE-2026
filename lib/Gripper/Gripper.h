@@ -19,13 +19,12 @@ public:
         Gr.smooth(50);
     }
     void lift_up(){
-        Lf.smooth(90);
-    }
-    void lift_up(uint8_t angle2){
-        Lf.smooth(angle2);
+        Lf.smooth(45);
+        Lf.smooth(95);
     }
     void lift_down(){
-        Lf.run(15);
+        Lf.smooth(45);
+        Lf.smooth(15);
     }
     void close_and_lift(int angle){
         close(angle);

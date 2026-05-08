@@ -35,13 +35,13 @@ public:
         if (angle > current_angle){
             for (int i = current_angle; i <= angle; i++){
                 run(i);
-                delay(30);
+                delay(20);
             }
         }
         else if (angle < current_angle){
             for (int i = current_angle; i >= angle; i--){
                 run(i);
-                delay(30);
+                delay(20);
             }
         }
         current_angle = angle;
