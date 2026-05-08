@@ -218,6 +218,63 @@
     50% { box-shadow: 0 0 20px #ffaa00cc; }
   }
 
+  /* ─── Base Speed Slider ────────────────────────── */
+  .speed-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    max-width: 160px;
+  }
+  .speed-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.45rem;
+    letter-spacing: 2px;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+  .speed-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+  }
+  #speedSlider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+  #speedSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: var(--glow);
+    cursor: pointer;
+    transition: transform .15s;
+  }
+  #speedSlider::-webkit-slider-thumb:active { transform: scale(1.25); }
+  #speedSlider::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+  }
+  #speedVal {
+    font-size: 0.65rem;
+    color: var(--accent);
+    min-width: 26px;
+    text-align: right;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
   /* ─── ABXY Buttons ───────────────────────────────────── */
   .abxy {
     display: grid;
@@ -397,12 +454,19 @@
       <div></div>
     </div>
 
-    <!-- Center: START / SELECT -->
+    <!-- Center: START / SELECT / Speed -->
     <div class="center-panel">
       <div class="mini-logo">EC·2026</div>
       <div class="system-btns">
         <button class="sys-btn" id="btn-select">SELECT</button>
         <button class="sys-btn" id="btn-start">START</button>
+      </div>
+      <div class="speed-panel">
+        <span class="speed-label">Base Speed</span>
+        <div class="speed-row">
+          <input type="range" id="speedSlider" min="0" max="255" value="150">
+          <span id="speedVal">150</span>
+        </div>
       </div>
     </div>
 
@@ -443,10 +507,20 @@ const BTN    = { UP:0x01, DOWN:0x02, LEFT:0x04, RIGHT:0x08, A:0x10, B:0x20, X:0x
 const FLAG   = { START:0x01, SELECT:0x02 };
 let buttons  = 0;
 let flags    = 0;   // byte[2]: bit0=START, bit1=SELECT
+let baseSpeed = 150; // byte[3]: 0–255
 let bleChar  = null;
 let sendTimer = null;
 let controlling = false;  // trạng thái điều khiển
 let logLineCount = 0;
+
+// ── Base Speed Slider ───────────────────────────────────────────────────
+const speedSlider = document.getElementById('speedSlider');
+const speedVal    = document.getElementById('speedVal');
+speedSlider.addEventListener('input', () => {
+  baseSpeed = parseInt(speedSlider.value);
+  speedVal.textContent = baseSpeed;
+  log(`Base speed set to ${baseSpeed}`, 'btn-line');
+});
 
 // ── Log ────────────────────────────────────────────────────────────────────────
 const logEl    = document.getElementById('log');
@@ -517,7 +591,7 @@ function buildPacket() {
   pkt[0] = 0xAA;
   pkt[1] = buttons;
   pkt[2] = flags;
-  pkt[3] = 0;
+  pkt[3] = baseSpeed & 0xFF;  // base_speed
   pkt[4] = 0;
   pkt[5] = 0;
   pkt[6] = 0;
