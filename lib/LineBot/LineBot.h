@@ -27,7 +27,7 @@ namespace LineBot {
 
   // Cập nhật thông số PID từ BLE và gửi dữ liệu lên app
   void update2();
-
+  void test();
   // In ra đồ thị ASCII hình cột lên Serial Monitor để debug
   void renderOLED();
   void drawDebugBWOLED();

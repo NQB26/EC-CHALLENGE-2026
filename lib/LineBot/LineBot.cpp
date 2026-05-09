@@ -1394,77 +1394,145 @@ void update() {
 }
 
 void update2() {
-  // Hệ số cố định cho chế độ này
-  Kp          = 0.035f;
+  Kp          = 0.04f;
   Ki          = 0.0f;
   Kd          = 0.4f;
   baseSpeed   = 70;
   maxSpeed    = 150;
   searchSpeed = 130;
 
-  processSensors();        // Đọc & cập nhật sensorBW / sensorNorm
-  runBasicPID(baseSpeed);  // Chạy PID
-  // renderOLED();            // Hiển thị bar chart mắt cảm biến
-  drawDebugBWOLED();
-}
+  // [FIX] Khởi tạo calib mặc định một lần duy nhất
+  // Thay WHITE_VAL / BLACK_VAL bằng giá trị đo thực tế của bạn
+  static bool calInitDone = false;
+  if (!calInitDone) {
+    const uint16_t WHITE_VAL = 3200;  // ← đo thực tế ADC trên nền trắng
+    const uint16_t BLACK_VAL =  800;  // ← đo thực tế ADC trên line đen
+    for (int i = 0; i < NUM_SENSORS; i++) {
+      sensorMin[i]   = BLACK_VAL;
+      sensorMax[i]   = WHITE_VAL;
+      sensorTh[i]    = (WHITE_VAL + BLACK_VAL) / 2;  // = 2000
+      sensorWhite[i] = WHITE_VAL;
+      sensorBlack[i] = BLACK_VAL;
+    }
+    blackIsHigh = false;  // ADC thấp = đen (điều chỉnh nếu module của bạn ngược)
+    calibrated  = true;
+    calInitDone = true;
+    filtReady   = false;  // cho IIR khởi động lại sạch
+  }
+
+  // processSensors();
+  runBasicPID(baseSpeed);
+  renderOLED();
+} 
 
 void runCalibration() {
   stopMotors();
-  
-  // Đợi người dùng nhả nút IO2 (nếu đang giữ từ trước)
-  while(digitalRead(2) == HIGH) { delay(10); }
-  delay(50);
-  
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("=== CALIBRATION ===");
-  display.println("1. Dat tren NEN TRANG");
-  display.println("   -> Bam IO2");
-  display.display();
-  
-  // Chờ bấm IO2 rồi nhả
-  while(digitalRead(2) == LOW) { delay(10); }
+
+  // Nhả nút nếu đang giữ
   while(digitalRead(2) == HIGH) { delay(10); }
   delay(50);
 
-  startCalibration();
-  while(calPhase == CAL_WHITE_SAMPLING) {
+  // ── Chờ bấm WHITE ─────────────────────────────────
+  while(digitalRead(2) == LOW) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,  0); display.println("=== CALIBRATION ===");
+    display.setCursor(0, 12); display.println("1. Dat tren NEN TRANG");
+    display.setCursor(0, 24); display.println("   -> Bam IO2");
+    display.display();
+    delay(10);
+  }
+  while(digitalRead(2) == HIGH) { delay(10); }
+  delay(50);
+
+  // ── Lấy mẫu WHITE – update OLED theo tiến trình ───
+  startCalibration();  // calPhase = CAL_WHITE_SAMPLING
+  while (calPhase == CAL_WHITE_SAMPLING) {
     updateCalibration();
+    // [FIX] Vẽ progress bar trực tiếp
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,  0); display.println(">>> CALIB 2-POINT <<<");
+    display.setCursor(0, 12); display.println("1/2 NEN TRANG");
+    display.setCursor(0, 24); display.println("Giu yen ca 8 mat");
+    display.setCursor(0, 36); display.print("Sample: ");
+    display.print(calSamples); display.print("/"); display.print(CAL_SAMPLE_N);
+    int pct = calSamples * 100 / CAL_SAMPLE_N;
+    display.drawRect(0, 50, 128, 9, SSD1306_WHITE);
+    display.fillRect(1, 51, pct * 126 / 100, 7, SSD1306_WHITE);
+    display.display();
     delay(2);
   }
 
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.println("=== CALIBRATION ===");
-  display.println("2. Dat tren LINE DEN");
-  display.println("   -> Bam IO2");
-  display.display();
-
-  // Chờ bấm IO2 rồi nhả
-  while(digitalRead(2) == LOW) { delay(10); }
+  // ── Chờ bấm BLACK ─────────────────────────────────
+  while(digitalRead(2) == LOW) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,  0); display.println(">>> CALIB 2-POINT <<<");
+    display.setCursor(0, 12); display.println("WHITE OK x500");
+    display.setCursor(0, 24); display.println("2/2 Dat len LINE DEN");
+    display.setCursor(0, 36); display.println("   -> Bam IO2");
+    display.display();
+    delay(10);
+  }
   while(digitalRead(2) == HIGH) { delay(10); }
   delay(50);
 
-  startBlackSampling();
-  while(calPhase == CAL_BLACK_SAMPLING) {
+  // ── Lấy mẫu BLACK ─────────────────────────────────
+  startBlackSampling();  // calPhase = CAL_BLACK_SAMPLING
+  while (calPhase == CAL_BLACK_SAMPLING) {
     updateCalibration();
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,  0); display.println(">>> CALIB 2-POINT <<<");
+    display.setCursor(0, 12); display.println("2/2 LINE DEN");
+    display.setCursor(0, 24); display.println("Giu yen ca 8 mat");
+    display.setCursor(0, 36); display.print("Sample: ");
+    display.print(calSamples); display.print("/"); display.print(CAL_SAMPLE_N);
+    int pct2 = calSamples * 100 / CAL_SAMPLE_N;
+    display.drawRect(0, 50, 128, 9, SSD1306_WHITE);
+    display.fillRect(1, 51, pct2 * 126 / 100, 7, SSD1306_WHITE);
+    display.display();
     delay(2);
   }
 
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.println("CALIB THANH CONG!");
-  display.println("-> Bam IO4 de CHAY");
-  display.display();
-  
-  // Đợi nhả nút IO4 (trường hợp đang giữ)
-  while(digitalRead(4) == LOW) { delay(10); }
-  
-  // Chờ bấm IO4 (Active LOW) rồi nhả
+  // Lúc này calPhase = CAL_DONE → gọi updateCalibration() một lần để chuyển về CAL_IDLE
+  updateCalibration();  // xử lý case CAL_DONE: set calibrated=true, calPhase=CAL_IDLE
+
+  // ── Xong, chờ bấm IO4 để chạy ─────────────────────
+  while(digitalRead(4) == LOW) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0,  0); display.println("CALIB THANH CONG!");
+    display.setCursor(0, 16); display.println("-> Bam IO4 de CHAY");
+    display.display();
+    delay(10);
+  }
   while(digitalRead(4) == HIGH) { delay(10); }
-  while(digitalRead(4) == LOW) { delay(10); }
   delay(50);
+}
+
+void test() {
+  handleInputs();
+  updateCalibration();
+
+  if (robotState == ST_RUN && calibrated && calPhase == CAL_IDLE) {
+    runBasicPID(baseSpeed);
+  } else {  
+    // Không chạy → dừng motor, vẫn đọc cảm biến để debug
+    if (robotState != ST_CAL) stopMotors();
+    if (calibrated) { processSensors(); }
+    else              readAllRaw();
+  }
+
+  renderOLED();
+  // renderSerial();
+  sendTelemetry();
 }
 
 // =====================================================
