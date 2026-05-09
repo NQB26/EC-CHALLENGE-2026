@@ -518,15 +518,30 @@
       box-shadow: 0 0 12px var(--green);
     }
 
-    .slider-num {
+    .slider-input {
       font-size: 0.85rem;
       color: var(--accent2);
-      min-width: 30px;
+      width: 45px;
       text-align: right;
+      background: #0a0c0f;
+      border: 1px solid #3a5060;
+      border-radius: 3px;
+      padding: 2px 4px;
+      font-family: 'Share Tech Mono', monospace;
     }
 
-    .slider-num.speed {
+    .slider-input.speed {
       color: var(--green);
+    }
+
+    .slider-input:focus {
+      outline: 1px solid var(--accent);
+    }
+
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
     }
 
     /* ─── Log panel ──────────────────────────────────────── */
@@ -620,13 +635,13 @@
       <div class="slider-row">
         <label>GRIPPER</label>
         <input type="range" id="gripperSlider" min="0" max="255" value="0">
-        <span class="slider-num" id="gripperNum">0</span>
+        <input type="number" class="slider-input" id="gripperNum" min="0" max="255" value="0">
       </div>
 
       <div class="slider-row speed">
         <label>SPEED</label>
-        <input type="range" class="speed-slider" id="speedSlider" min="0" max="255" value="160">
-        <span class="slider-num speed" id="speedNum">160</span>
+        <input type="range" class="speed-slider" id="speedSlider" min="0" max="255" value="100">
+        <input type="number" class="slider-input speed" id="speedNum" min="0" max="255" value="100">
       </div>
 
       <!-- Log Panel -->
@@ -672,7 +687,7 @@
     const SYS = { START: 0x01, SELECT: 0x02 };
     let buttons = 0;
     let flags = 0;
-    let leftX = 0, leftY = 0, rightX = 0, rightY = 0, gripper = 0, baseSpeed = 160;
+    let leftX = 0, leftY = 0, rightX = 0, rightY = 0, gripper = 0, baseSpeed = 100;
     let bleChar = null;
     let sendTimer = null;
 
@@ -789,12 +804,29 @@
     const gripArc = document.getElementById('gripArc');
     const gripCenter = document.getElementById('gripValCenter');
 
-    gSlider.addEventListener('input', () => {
-      gripper = parseInt(gSlider.value);
-      gripNum.textContent = gripper;
+    function updateGripper(val) {
+      gripper = val;
       const pct = gripper / 255;
       gripArc.style.strokeDashoffset = 157 - (157 * pct);
       gripCenter.textContent = Math.round(pct * 100);
+    }
+
+    gSlider.addEventListener('input', () => {
+      gripNum.value = gSlider.value;
+      updateGripper(parseInt(gSlider.value));
+    });
+
+    gripNum.addEventListener('input', () => {
+      let val = parseInt(gripNum.value);
+      if (isNaN(val)) return; // Cho phép xoá trắng lúc gõ
+      if (val > 255) val = 255;
+      if (val < 0) val = 0;
+      gSlider.value = val;
+      updateGripper(val);
+    });
+    
+    gripNum.addEventListener('blur', () => {
+      if (isNaN(parseInt(gripNum.value))) gripNum.value = gripper;
     });
 
     const sSlider = document.getElementById('speedSlider');
@@ -802,7 +834,20 @@
 
     sSlider.addEventListener('input', () => {
       baseSpeed = parseInt(sSlider.value);
-      speedNum.textContent = baseSpeed;
+      speedNum.value = baseSpeed;
+    });
+
+    speedNum.addEventListener('input', () => {
+      let val = parseInt(speedNum.value);
+      if (isNaN(val)) return;
+      if (val > 255) val = 255;
+      if (val < 0) val = 0;
+      sSlider.value = val;
+      baseSpeed = val;
+    });
+
+    speedNum.addEventListener('blur', () => {
+      if (isNaN(parseInt(speedNum.value))) speedNum.value = baseSpeed;
     });
 
     // ── Joystick ──────────────────────────────────────────────────────────────────
