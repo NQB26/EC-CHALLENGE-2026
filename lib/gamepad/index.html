@@ -147,31 +147,45 @@
       }
     }
 
-    /* ─── Main layout ────────────────────────────────────── */
-    main {
+    /* ─── Main layout (Landscape optimized) ──────────────── */
+    main.landscape-gamepad {
       width: 100%;
-      max-width: 800px;
-      padding: 20px 16px;
+      max-width: 900px;
+      padding: 10px;
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: stretch;
+      gap: 10px;
+      flex: 1; /* Take up remaining height */
+    }
+
+    .side-panel {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      align-items: center;
+      justify-content: space-evenly;
+      gap: 10px;
+      flex: 0 0 auto;
     }
 
-    /* ─── Gamepad shell ──────────────────────────────────── */
-    .gamepad {
+    .center-panel {
+      flex: 1;
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 24px 20px;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr;
-      grid-template-rows: auto auto;
-      gap: 20px;
+      border-radius: 8px;
+      padding: 12px 15px;
+      display: flex;
+      flex-direction: column;
       align-items: center;
+      justify-content: flex-start;
+      gap: 10px;
+      min-width: 220px;
       position: relative;
+      overflow: hidden;
     }
 
-    .gamepad::before {
+    .center-panel::before {
       content: '';
       position: absolute;
       top: 0;
@@ -186,22 +200,22 @@
     /* ─── D-Pad ──────────────────────────────────────────── */
     .dpad {
       display: grid;
-      grid-template-columns: repeat(3, 48px);
-      grid-template-rows: repeat(3, 48px);
+      grid-template-columns: repeat(3, 45px);
+      grid-template-rows: repeat(3, 45px);
       gap: 4px;
-      justify-self: center;
     }
 
     .dpad-btn {
-      background: #0d1520;
-      border: 1px solid var(--border);
-      border-radius: 3px;
+      background: #16202c;
+      border: 1px solid #3a5060;
+      border-radius: 4px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--dim);
-      font-size: 14px;
+      color: #c0d6e4;
+      font-size: 16px;
+      font-weight: bold;
       user-select: none;
       transition: all .1s;
       -webkit-tap-highlight-color: transparent;
@@ -320,21 +334,20 @@
     /* ─── ABXY Buttons ───────────────────────────────────── */
     .abxy {
       display: grid;
-      grid-template-columns: repeat(3, 48px);
-      grid-template-rows: repeat(3, 48px);
+      grid-template-columns: repeat(3, 45px);
+      grid-template-rows: repeat(3, 45px);
       gap: 4px;
-      justify-self: center;
     }
 
     .abxy-btn {
       border-radius: 50%;
-      border: 1px solid var(--border);
-      background: #0d1520;
+      border: 1px solid #3a5060;
+      background: #16202c;
       cursor: pointer;
       font-family: 'Orbitron', sans-serif;
-      font-size: 0.65rem;
-      font-weight: 700;
-      color: var(--dim);
+      font-size: 0.8rem;
+      font-weight: 900;
+      color: #c0d6e4;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -396,18 +409,11 @@
     }
 
     /* ─── Joysticks ──────────────────────────────────────── */
-    .joysticks {
-      grid-column: 1 / -1;
-      display: flex;
-      gap: 24px;
-      justify-content: space-around;
-    }
-
     .stick-wrap {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     .stick-lbl {
@@ -417,10 +423,10 @@
     }
 
     .stick-zone {
-      width: 100px;
-      height: 100px;
-      background: #0d1520;
-      border: 1px solid var(--border);
+      width: 85px;
+      height: 85px;
+      background: #16202c;
+      border: 1px solid #3a5060;
       border-radius: 50%;
       position: relative;
       cursor: pointer;
@@ -432,13 +438,13 @@
       position: absolute;
       inset: 8px;
       border-radius: 50%;
-      border: 1px dashed var(--border);
+      border: 1px dashed #4a657a;
     }
 
     .stick-thumb {
-      width: 32px;
-      height: 32px;
-      background: var(--dim);
+      width: 34px;
+      height: 34px;
+      background: #6a8ba0;
       border-radius: 50%;
       position: absolute;
       top: 50%;
@@ -446,7 +452,7 @@
       transform: translate(-50%, -50%);
       transition: background .1s;
       pointer-events: none;
-      border: 1px solid #3a5060;
+      border: 1px solid #8ba8b8;
     }
 
     .stick-zone:active .stick-thumb,
@@ -466,11 +472,12 @@
     .slider-row {
       display: flex;
       align-items: center;
-      gap: 14px;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      padding: 14px 20px;
+      gap: 10px;
+      background: #16202c;
+      border: 1px solid #3a5060;
+      padding: 10px 15px;
       border-radius: 4px;
+      width: 100%;
     }
 
     .slider-row label {
@@ -524,11 +531,13 @@
 
     /* ─── Log panel ──────────────────────────────────────── */
     .log {
-      background: var(--panel);
+      background: #0d1520;
       border: 1px solid var(--border);
-      padding: 10px 14px;
-      font-size: 0.65rem;
-      height: 100px;
+      padding: 8px 12px;
+      font-size: 0.6rem;
+      flex-grow: 1;
+      width: 100%;
+      height: 60px; /* Small default height */
       overflow-y: auto;
       color: var(--text);
       border-radius: 4px;
@@ -566,8 +575,9 @@
     <span id="statusText">DISCONNECTED</span>
   </div>
 
-  <main>
-    <div class="gamepad">
+  <main class="landscape-gamepad">
+    <!-- LEFT PANEL -->
+    <div class="side-panel">
       <!-- D-Pad -->
       <div class="dpad">
         <div></div>
@@ -581,19 +591,50 @@
         <div></div>
       </div>
 
-      <!-- Center -->
-      <div class="center-panel">
-        <div class="mini-logo">GRIPPER</div>
-        <div class="grip-indicator">
-          <svg viewBox="0 0 60 60">
-            <circle cx="30" cy="30" r="25" />
-            <circle class="grip-arc" id="gripArc" cx="30" cy="30" r="25" />
-          </svg>
-          <span class="grip-val" id="gripValCenter">0</span>
-          <span class="grip-lbl">%</span>
+      <!-- Left Stick -->
+      <div class="stick-wrap">
+        <span class="stick-lbl">LEFT STICK</span>
+        <div class="stick-zone" id="stickL">
+          <div class="stick-thumb" id="thumbL"></div>
+        </div>
+        <div class="stick-vals">
+          <span>X:<span id="lxVal">0</span></span>
+          <span>Y:<span id="lyVal">0</span></span>
         </div>
       </div>
+    </div>
 
+    <!-- CENTER PANEL -->
+    <div class="center-panel">
+      <!-- Gripper Indicator (Scaled down) -->
+      <div class="grip-indicator" style="transform: scale(0.85); margin: -5px 0;">
+        <svg viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="25" />
+          <circle class="grip-arc" id="gripArc" cx="30" cy="30" r="25" />
+        </svg>
+        <span class="grip-val" id="gripValCenter">0</span>
+        <span class="grip-lbl">%</span>
+      </div>
+
+      <!-- Sliders -->
+      <div class="slider-row">
+        <label>GRIPPER</label>
+        <input type="range" id="gripperSlider" min="0" max="255" value="0">
+        <span class="slider-num" id="gripperNum">0</span>
+      </div>
+
+      <div class="slider-row speed">
+        <label>SPEED</label>
+        <input type="range" class="speed-slider" id="speedSlider" min="0" max="255" value="160">
+        <span class="slider-num speed" id="speedNum">160</span>
+      </div>
+
+      <!-- Log Panel -->
+      <div class="log" id="log"></div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="side-panel">
       <!-- ABXY -->
       <div class="abxy">
         <div></div>
@@ -607,46 +648,18 @@
         <div></div>
       </div>
 
-      <!-- Joysticks -->
-      <div class="joysticks">
-        <div class="stick-wrap">
-          <span class="stick-lbl">LEFT STICK</span>
-          <div class="stick-zone" id="stickL">
-            <div class="stick-thumb" id="thumbL"></div>
-          </div>
-          <div class="stick-vals">
-            <span>X:<span id="lxVal">0</span></span>
-            <span>Y:<span id="lyVal">0</span></span>
-          </div>
+      <!-- Right Stick -->
+      <div class="stick-wrap">
+        <span class="stick-lbl">RIGHT STICK</span>
+        <div class="stick-zone" id="stickR">
+          <div class="stick-thumb" id="thumbR"></div>
         </div>
-        <div class="stick-wrap">
-          <span class="stick-lbl">RIGHT STICK</span>
-          <div class="stick-zone" id="stickR">
-            <div class="stick-thumb" id="thumbR"></div>
-          </div>
-          <div class="stick-vals">
-            <span>X:<span id="rxVal">0</span></span>
-            <span>Y:<span id="ryVal">0</span></span>
-          </div>
+        <div class="stick-vals">
+          <span>X:<span id="rxVal">0</span></span>
+          <span>Y:<span id="ryVal">0</span></span>
         </div>
       </div>
     </div>
-
-    <!-- Sliders -->
-    <div class="slider-row">
-      <label>GRIPPER</label>
-      <input type="range" id="gripperSlider" min="0" max="255" value="0">
-      <span class="slider-num" id="gripperNum">0</span>
-    </div>
-
-    <div class="slider-row speed">
-      <label>SPEED</label>
-      <input type="range" class="speed-slider" id="speedSlider" min="0" max="255" value="160">
-      <span class="slider-num speed" id="speedNum">160</span>
-    </div>
-
-    <!-- Log -->
-    <div class="log" id="log"></div>
   </main>
 
   <script>
@@ -796,7 +809,7 @@
     function setupStick(zoneId, thumbId, onMove) {
       const zone = document.getElementById(zoneId);
       const thumb = document.getElementById(thumbId);
-      const r = 50, dr = 16; // zone radius, thumb deadzone
+      const r = 42.5, dr = 14; // zone radius, thumb deadzone
       let active = false, originX, originY;
 
       function move(cx, cy) {
