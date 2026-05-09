@@ -562,8 +562,8 @@ function log(msg, cls='') {
   const line = document.createElement('div');
   line.className = 'line' + (cls ? ' ' + cls : '');
   line.innerHTML = `<span class="ts">[${ts}]</span><span class="msg">${msg}</span>`;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
+  logEl.prepend(line);
+  logEl.scrollTop = 0;
   logLineCount++;
   logCount.textContent = logLineCount + ' lines';
 }
