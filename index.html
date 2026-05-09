@@ -119,9 +119,10 @@
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     gap: 16px;
-    align-items: center;
+    align-items: stretch;
     position: relative;
-    flex-shrink: 0;
+    flex: 1;
+    min-height: 0;
   }
   .gamepad::before {
     content:'';
@@ -140,13 +141,14 @@
     justify-self: center;
   }
   .dpad-btn {
-    background: #0d1520;
-    border: 1px solid var(--border);
-    border-radius: 3px;
+    background: #16202c;
+    border: 1px solid #3a5060;
+    border-radius: 4px;
     cursor: pointer;
     display:flex; align-items:center; justify-content:center;
-    color: var(--dim);
-    font-size: 16px;
+    color: #c0d6e4;
+    font-size: 18px;
+    font-weight: bold;
     user-select:none;
     transition: all .1s;
     -webkit-tap-highlight-color: transparent;
@@ -168,6 +170,8 @@
   /* ─── Center panel ───────────────────────────────────── */
   .center-panel {
     display:flex; flex-direction:column; align-items:center; gap:10px;
+    height: 100%;
+    justify-content: flex-start;
   }
   .mini-logo {
     font-family:'Orbitron',sans-serif; font-size:0.55rem;
@@ -268,11 +272,24 @@
     cursor: pointer;
   }
   #speedVal {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     color: var(--accent);
-    min-width: 26px;
+    width: 45px;
     text-align: right;
+    background: #0a0c0f;
+    border: 1px solid #3a5060;
+    border-radius: 3px;
+    padding: 2px 4px;
     font-family: 'Share Tech Mono', monospace;
+    outline: none;
+  }
+  #speedVal:focus {
+    border-color: var(--accent);
+  }
+  input[type=number]::-webkit-inner-spin-button, 
+  input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
   }
 
   /* ─── ABXY Buttons ───────────────────────────────────── */
@@ -285,12 +302,12 @@
   }
   .abxy-btn {
     border-radius: 50%;
-    border: 1px solid var(--border);
-    background: #0d1520;
+    border: 1px solid #3a5060;
+    background: #16202c;
     cursor: pointer;
     font-family: 'Orbitron', sans-serif;
-    font-size: 0.65rem; font-weight:700;
-    color: var(--dim);
+    font-size: 0.8rem; font-weight:900;
+    color: #c0d6e4;
     display:flex; align-items:center; justify-content:center;
     user-select:none;
     transition: all .1s;
@@ -312,11 +329,13 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--panel);
+    background: #0a0c0f;
     border: 1px solid var(--border);
     border-radius: 4px;
     overflow: hidden;
-    min-height: 0;
+    min-height: 80px;
+    width: 100%;
+    max-width: 300px;
   }
   .log-header {
     display: flex;
@@ -454,7 +473,7 @@
       <div></div>
     </div>
 
-    <!-- Center: START / SELECT / Speed -->
+    <!-- Center: START / SELECT / Speed / Log -->
     <div class="center-panel">
       <div class="mini-logo">EC·2026</div>
       <div class="system-btns">
@@ -464,9 +483,20 @@
       <div class="speed-panel">
         <span class="speed-label">Base Speed</span>
         <div class="speed-row">
-          <input type="range" id="speedSlider" min="0" max="255" value="150">
-          <span id="speedVal">150</span>
+          <input type="range" id="speedSlider" min="0" max="255" value="100">
+          <input type="number" id="speedVal" min="0" max="255" value="100">
         </div>
+      </div>
+      
+      <!-- Serial Log -->
+      <div class="log-container">
+        <div class="log-header">
+          <span class="log-title">▸ SERIAL</span>
+          <div class="log-actions">
+            <button class="log-clear-btn" id="clearLogBtn">CLEAR</button>
+          </div>
+        </div>
+        <div class="log" id="log"></div>
       </div>
     </div>
 
@@ -483,18 +513,6 @@
       <div></div>
     </div>
   </div>
-
-  <!-- Serial Log -->
-  <div class="log-container">
-    <div class="log-header">
-      <span class="log-title">▸ SERIAL OUTPUT</span>
-      <div class="log-actions">
-        <span class="log-count" id="logCount">0 lines</span>
-        <button class="log-clear-btn" id="clearLogBtn">CLEAR</button>
-      </div>
-    </div>
-    <div class="log" id="log"></div>
-  </div>
 </main>
 
 <script>
@@ -507,7 +525,7 @@ const BTN    = { UP:0x01, DOWN:0x02, LEFT:0x04, RIGHT:0x08, A:0x10, B:0x20, X:0x
 const FLAG   = { START:0x01, SELECT:0x02 };
 let buttons  = 0;
 let flags    = 0;   // byte[2]: bit0=START, bit1=SELECT
-let baseSpeed = 150; // byte[3]: 0–255
+let baseSpeed = 100; // byte[3]: 0–255
 let bleChar  = null;
 let sendTimer = null;
 let controlling = false;  // trạng thái điều khiển
@@ -518,8 +536,20 @@ const speedSlider = document.getElementById('speedSlider');
 const speedVal    = document.getElementById('speedVal');
 speedSlider.addEventListener('input', () => {
   baseSpeed = parseInt(speedSlider.value);
-  speedVal.textContent = baseSpeed;
-  log(`Base speed set to ${baseSpeed}`, 'btn-line');
+  speedVal.value = baseSpeed;
+});
+
+speedVal.addEventListener('input', () => {
+  let val = parseInt(speedVal.value);
+  if (isNaN(val)) return;
+  if (val > 255) val = 255;
+  if (val < 0) val = 0;
+  baseSpeed = val;
+  speedSlider.value = val;
+});
+
+speedVal.addEventListener('blur', () => {
+  if (isNaN(parseInt(speedVal.value))) speedVal.value = baseSpeed;
 });
 
 // ── Log ────────────────────────────────────────────────────────────────────────
