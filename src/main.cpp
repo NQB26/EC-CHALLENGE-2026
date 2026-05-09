@@ -14,7 +14,7 @@ BLEGamepad gp;
 #define SERVO_PIN1 16
 #define SERVO_PIN2 5
 
-uint8_t base_speed = 160;
+uint8_t base_speed = 100;
 bool start = false;
 uint8_t nv = 0;
 uint8_t angle = 50;
@@ -66,7 +66,7 @@ void onGamepad(const GamepadState& s) {
   }
 
   if (gp.isY()) {
-    GR.lift_up();
+    GR.lift_up(15);
     Serial.println("Y pressed -> Nâng tay gắp");
   }
 
@@ -167,7 +167,7 @@ void setup() {
   // Khởi tạo toàn bộ LineBot (Màn hình OLED, Motor, cảm biến MUX, NVS, BLE...)
   LineBot::begin();
   
-  GR.init(SERVO_PIN1, 2, 50, SERVO_PIN2, 3, 50);
+  GR.init(SERVO_PIN1, 2, 50, SERVO_PIN2, 3, 10);
   gp.begin("Lightning-Seekers");
   gp.onData(onGamepad);
 
