@@ -827,6 +827,8 @@ void drawPageMotor() {
   display.print(BLE_DEVICE_NAME);
 }
 
+extern uint8_t nv; // Biến nv từ main.cpp
+
 void renderOLED() {
   static unsigned long lastT = 0;
   if (millis() - lastT < 80) return;
@@ -847,6 +849,14 @@ void renderOLED() {
       default: drawPageRaw();      break;
     }
   }
+
+  // Luôn hiển thị chế độ NV góc trên bên phải
+  display.setTextSize(1);
+  // Vẽ nền đen chèn lên chữ cũ nếu bị đè
+  display.setTextColor(SSD1306_WHITE, SSD1306_BLACK); 
+  display.setCursor(100, 0);
+  display.print("NV:");
+  display.print(nv);
 
   display.display();
 }
@@ -1158,149 +1168,82 @@ void executePID(bool found, int pos, int customBaseSpeed) {
   setMotors(lPWM, rPWM);
 }
 void runLineFollower() {
-  int  pos   = centerPos;
+  int pos = centerPos;
   bool found = getLinePos(pos);
 
-  // Ghi nhớ hướng và thời gian khi vừa mất line
+  // Tạo mask 8-bit từ 8 mắt cảm biến (mắt 0 là bit 0, mắt 7 là bit 7)
+  uint8_t mask = 0;
+  for (int i = 0; i < 8; i++) {
+    if (sensorBW[i]) {
+      mask |= (1 << i);
+    }
+  }
+
+  // Ghi nhớ hướng khi vừa mất line
   if (lastFound && !found) {
-    lostLineDir  = (lastErr >= 0) ? 1 : -1;
-    lostLineTime = millis();
+    lostLineDir = (lastErr >= 0) ? 1 : -1;
+    if ((sensorBW[3] || sensorBW[4]) && !sensorBW[0] && !sensorBW[7]) lostLineDir = 0;
   }
   lastFound = found;
-  lastPos   = pos;
+  if (found) {
+    lastPos = pos;
+  }
 
   // ==============================================================
-  // CỖ MÁY CHUYỂN TRẠNG THÁI (STATE MACHINE)
+  // XỬ LÝ THEO MASK (Thay thế State Machine cũ)
   // ==============================================================
-  switch (currentPhase) {
-
-    // --------------------------------------------------
-    // GIAI ĐOẠN 1: Chạy bình thường -> Chờ cua gắt 145 độ phải
-    // --------------------------------------------------
-    case PHASE_NORMAL:
-      // KÍCH HOẠT: Mắt ngoài cùng bên phải (VD: C7) thấy line, mắt trái (C0) không thấy, lệch tâm mạnh
-      if (found && sensorBW[1] && !sensorBW[7] && (pos - centerPos) > 1800) {
-        stopMotors(); 
-        delay(50); // Phanh cứng dập quán tính
-        currentPhase = PHASE_TURN_145;
-        phaseStartTime = millis();
-        break;
-      }
-      if (found && sensorBW[7] && sensorBW[6] && sensorBW[2] && sensorBW[1] && (!sensorBW[3] || !sensorBW[4])){
-        currentPhase = PHASE_INVERTED;
-      }
-      if (found && sensorBW[1] && sensorBW[7] && sensorBW[3] && (millis() - phaseStartTime > 500)) {
-        currentPhase = PHASE_CIRCLE;
-        phaseStartTime = millis();
-        break;
-      }
-      if (!found) {
-        // Mất line thông thường -> Xoay tìm line
-        int spinPWM = searchSpeed;
-        if (lostLineDir > 0) setMotors( spinPWM, -spinPWM);
-        else                 setMotors(-spinPWM,  spinPWM);
+  
+  switch (mask) {
+    case 0b00000000: {
+      // Trường hợp 1: mask = 00000000 (Mất line hoàn toàn)
+      int spinPWM = searchSpeed;
+      if (lostLineDir > 0) {
+        setMotors(spinPWM, -spinPWM); // Quay phải
+      } else if (lostLineDir < 0){
+        setMotors(-spinPWM, spinPWM); // Quay trái
       } else {
-        executePID(found, pos, baseSpeed);
+        setMotors(baseSpeed, baseSpeed);
       }
+      break; // Khi found = false, executePID bên dưới sẽ tự return sớm, không sao cả.
+    }
+    case 0b11111111: {
+      // Trường hợp 2: mask = 11111111 (Vạch ngang, ngã tư, đi qua đường tròn)
+      setMotors(baseSpeed, baseSpeed);
+      delay(1000);
+      return; // <--- QUAN TRỌNG: return để KHÔNG bị executePID ghi đè setMotors bên trên!
+    }
+    case 0b11100111:
+    case 0b11110111:
+    case 0b11101111:
+    case 0b11001111:
+    case 0b11110011: {
+      // XỬ LÝ ĐẢO LINE (Line trắng nền đen)
+      static unsigned long lastInvertTime = 0;
+      // Chống dội (debounce) 500ms để không bị đảo liên tục khi xe chần chừ ở ranh giới
+      if (millis() - lastInvertTime > 500) {
+        invertLineMode = !invertLineMode;
+        lastInvertTime = millis();
+        // Serial.println(invertLineMode ? "[INFO] ENTERED INVERTED LINE" : "[INFO] EXITED INVERTED LINE");
+      }
+      return; // Return bỏ qua loop này, chờ vòng lặp sau cập nhật lại mask mới
+    }
+    case 0b10011000:
+    case 0b10001000:
+    case 0b10010000:
+    case 0b01011000:
+    case 0b01001000:
+    case 0b01010000: {
+      // Trường hợp rẽ gắt
+      setMotors(searchSpeed, -searchSpeed);
+      delay(100);
+      return; // <--- QUAN TRỌNG: return để KHÔNG bị executePID ghi đè
+    }
+    default: {
+      // Các trường hợp còn lại (Thấy line một phần)
+      // -> Dò line bằng PID bình thường
+      executePID(found, pos, baseSpeed);
       break;
-
-    // --------------------------------------------------
-    // GIAI ĐOẠN 2: Hard-code bẻ lái gắt 145 độ
-    // --------------------------------------------------
-    case PHASE_TURN_145:
-      // Bánh phải lùi, bánh trái tiến để xoay quanh tâm
-      setMotors(160, -160); 
-
-      // KÍCH HOẠT: Xoay mù khoảng 300ms, sau đó đợi mắt giữa (C3, C4) chạm line lại
-      if (millis() - phaseStartTime > 300 && (sensorBW[3] || sensorBW[4])) {
-        stopMotors(); delay(50);
-        
-        // Chuẩn bị vào line Inverted
-        invertLineMode = true; 
-        currentPhase = PHASE_NORMAL;
-        phaseStartTime = millis();
-      }
-      break;
-
-    // --------------------------------------------------
-    // GIAI ĐOẠN 3: Line trắng nền đen (Inverted)
-    // --------------------------------------------------
-    case PHASE_INVERTED:
-      // KÍCH HOẠT: Kết thúc inverted khi gặp vạch ngang (tất cả các mắt đều đen) 
-      // Do đang ở Inverted Mode, nền đen sẽ báo là KHÔNG CÓ LINE. 
-      // Vạch ngang màu trắng vắt ngang đường -> Tất cả các mắt đều báo CÓ LINE.
-      if (found && sensorBW[1] && sensorBW[7] && sensorBW[2] && (!sensorBW[3] || !sensorBW[4]) && (millis() - phaseStartTime > 1000)) {
-        invertLineMode = false; // Trả về màu line bình thường
-        currentPhase = PHASE_NORMAL;
-        phaseStartTime = millis();
-        break;
-      }
-
-      if (!found) {
-        if (lostLineDir > 0) setMotors(searchSpeed, -searchSpeed);
-        else                 setMotors(-searchSpeed, searchSpeed);
-      } else {
-        executePID(found, pos, baseSpeed);
-      }
-      break;
-
-    // --------------------------------------------------
-    // GIAI ĐOẠN 4: Vòng tròn (Smooth Curve)
-    // --------------------------------------------------
-    case PHASE_CIRCLE:
-      // KÍCH HOẠT: Thoát vòng tròn khi gặp lại vạch ngang hoặc đi hết thời gian ước tính (VD: 4 giây)
-      if ((found && sensorBW[0] && sensorBW[7]) || (millis() - phaseStartTime > 4000)) {
-        currentPhase = PHASE_DOTTED;
-        phaseStartTime = millis();
-        break;
-      }
-
-      if (!found) {
-        if (lostLineDir > 0) setMotors(searchSpeed, -searchSpeed);
-        else                 setMotors(-searchSpeed, searchSpeed);
-      } else {
-        // Trong vòng tròn, nên hạ BaseSpeed xuống một chút để ôm cua gắt tốt hơn
-        executePID(found, pos, baseSpeed * 0.75); 
-      }
-      break;
-
-    // --------------------------------------------------
-    // GIAI ĐOẠN 5: Line đứt đoạn (Dotted Line)
-    // --------------------------------------------------
-    case PHASE_DOTTED:
-      // KÍCH HOẠT VỀ ĐÍCH: Gặp vạch đích (toàn bộ mắt chạm line đen liên tục > 100ms)
-      if (found && sensorBW[0] && sensorBW[7] && sensorBW[3]) {
-        currentPhase = PHASE_FINISH;
-        break;
-      }
-
-      if (!found) {
-        // ĐIỂM CỐT LÕI CỦA DOTTED LINE: 
-        // Khi mất line, KHÔNG xoay tìm ngay lập tức. Chạy rướn thẳng đà trong 400ms để bắt vạch tiếp theo.
-        if (millis() - lostLineTime < 400) {
-          // Chạy thẳng hoặc hơi cong nhẹ theo lastErr
-          int coastBase = baseSpeed * 0.8;
-          int offset = (lastErr > 0) ? 20 : -20; 
-          setMotors(coastBase + offset, coastBase - offset);
-        } else {
-          // Rướn quá 400ms không thấy -> Bắt buộc xoay tìm line
-          if (lostLineDir > 0) setMotors(searchSpeed, -searchSpeed);
-          else                 setMotors(-searchSpeed, searchSpeed);
-        }
-      } else {
-        executePID(found, pos, baseSpeed);
-      }
-      break;
-
-    // --------------------------------------------------
-    // GIAI ĐOẠN 6: Về đích
-    // --------------------------------------------------
-    case PHASE_FINISH:
-      stopMotors();
-      robotState = ST_STOP;
-      currentPhase = PHASE_NORMAL; // Reset trạng thái cho lần chạy sau
-      Serial.println("[INFO] FINISH LINE REACHED!");
-      break;
+    }
   }
 }
 // =====================================================

@@ -16,7 +16,7 @@ BLEGamepad gp;
 
 uint8_t base_speed = 100;
 bool start = false;
-uint8_t nv = 0;
+uint8_t nv = 1;
 uint8_t angle = 50;
 
 void onGamepad(const GamepadState& s) {
@@ -27,7 +27,15 @@ void onGamepad(const GamepadState& s) {
     start = false;
     return;
   } 
-  if (gp.isSelect()) nv++;
+  
+  static bool lastSelect = false;
+  bool currentSelect = gp.isSelect();
+  if (currentSelect && !lastSelect) {
+    nv++;
+    if (nv > 3) nv = 1;
+  }
+  lastSelect = currentSelect;
+
   base_speed = gp.getSpeed();
   if (gp.isUp()) {
     motorL.motor_run(base_speed);
@@ -180,7 +188,7 @@ void setup() {
   motorR.encoder_reset();
 
   // Gọi hàm chọn calib trước khi vào loop
-  runCalibration(); 
+  // runCalibration(); 
 }
 
 void nv2() {
@@ -299,18 +307,18 @@ void nv3() {
 }
 void loop() {
   // R.motor_run(255);
-  gp.update();
-  if (!start){
-    // Serial.println("Tu dong di chuyen.");
-    if (nv == 2){
-      // drawBW();
-      nv2();
-      // update2();
-      // update2();
-      // test();
-    }
-    if (nv == 3){
+  // gp.update();
+  // if (!start){
+  //   // Serial.println("Tu dong di chuyen.");
+  //   if (nv == 2){
+  //     // drawBW();
+  //     nv2();
+  //     // update2();
+  //     // update2();
+  //     // test();
+  //   }
+  //   if (nv == 3){
       nv3();
-    }
-  }
+    // }
+  // }
 }
